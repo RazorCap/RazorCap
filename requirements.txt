@@ -10,3 +10,4 @@ pyjwt
 flask
 httpx
 bcrypt
+groq

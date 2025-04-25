@@ -8,7 +8,7 @@ import time
 import json
 import secrets
 from functools import wraps
-from core.solver import Hcaptcha
+from solver import hcaptcha
 import threading
 from flask_wtf.csrf import CSRFProtect
 
@@ -922,11 +922,11 @@ class Solver:
             if not valid:
                 return "error_" + message
             
-            # Create and solve captcha
-            captcha = Hcaptcha(sitekey, siteurl, proxy, rqdata)
+            # Create and solve captcha using the new solver
+            captcha = hcaptcha(sitekey, siteurl, proxy, rqdata)
             result = captcha.solve()
             
-            if result == "None":
+            if result is None:
                 return "error"
             
             # Increment API key usage
@@ -1023,15 +1023,15 @@ class Solver:
     
     def _task_solver(self, task_id, task_type, sitekey, siteurl, proxy, rqdata):
         try:
-            # Create and solve captcha
-            captcha = Hcaptcha(sitekey, siteurl, proxy, rqdata)
+            # Create and solve captcha using the new solver
+            captcha = hcaptcha(sitekey, siteurl, proxy, rqdata)
             result = captcha.solve()
             
             # Update task in database
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             
-            if result == "None":
+            if result is None:
                 cursor.execute(
                     "UPDATE tasks SET status = ?, error = ? WHERE task_id = ?", 
                     ("error", "Failed to solve captcha", task_id)
