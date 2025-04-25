@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorCap Admin - Settings</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-bg: #0a0a0a;
+            --purple-primary: #6b21a8;
+            --purple-secondary: #581c87;
+            --purple-accent: #7e22ce;
+            --purple-light: #a855f7;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --gradient-primary: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .gradient-sphere-global {
+            position: absolute;
+            top: 50%;
+            right: -20%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle at center, rgba(107, 33, 168, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: float 10s infinite alternate;
+        }
+
+        .gradient-lines-global {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(107, 33, 168, 0.05) 10px,
+                rgba(107, 33, 168, 0.05) 20px
+            );
+        }
+
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-top: 60px;
+        }
+        .admin-title {
+            font-size: 24px;
+            font-weight: bold;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .admin-nav {
+            display: flex;
+            gap: 15px;
+        }
+        .admin-nav a {
+            padding: 8px 15px;
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.3s;
+            border: 1px solid var(--card-border);
+        }
+        .admin-nav a:hover {
+            background-color: rgba(107, 33, 168, 0.2);
+            border-color: var(--purple-light);
+        }
+        .admin-nav a.active {
+            background-color: rgba(107, 33, 168, 0.3);
+            border-color: var(--purple-light);
+        }
+        .admin-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .admin-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(107, 33, 168, 0.2);
+        }
+        .admin-card-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--purple-light);
+        }
+        .admin-form {
+            display: grid;
+            gap: 20px;
+        }
+        .admin-form-section {
+            display: grid;
+            gap: 15px;
+        }
+        .admin-form-group {
+            display: grid;
+            gap: 5px;
+        }
+        .admin-form-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .admin-form-input {
+            padding: 8px 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 4px;
+            color: var(--text-primary);
+        }
+        .admin-form-input:focus {
+            outline: none;
+            border-color: var(--purple-light);
+        }
+        .admin-form-input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+        .admin-btn {
+            padding: 8px 15px;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .admin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(107, 33, 168, 0.4);
+        }
+        .admin-btn-danger {
+            background: linear-gradient(135deg, #e53e3e, #c53030);
+        }
+        .admin-btn-danger:hover {
+            background: linear-gradient(135deg, #c53030, #9b2c2c);
+        }
+        .admin-alert {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .admin-alert-success {
+            background: rgba(56, 161, 105, 0.2);
+            border: 1px solid #38a169;
+            color: #38a169;
+        }
+        .admin-alert-error {
+            background: rgba(229, 62, 62, 0.2);
+            border: 1px solid #e53e3e;
+            color: #e53e3e;
+        }
+        .admin-toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .admin-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .admin-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--card-bg);
+            transition: .4s;
+            border-radius: 24px;
+            border: 1px solid var(--card-border);
+        }
+        .admin-toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 3px;
+            background-color: var(--text-primary);
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .admin-toggle-slider {
+            background-color: var(--purple-primary);
+        }
+        input:checked + .admin-toggle-slider:before {
+            transform: translateX(26px);
+        }
+        .admin-toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-toggle-label span {
+            color: var(--text-primary);
+        }
+        .admin-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+        }
+        .admin-modal-content {
+            position: relative;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            margin: 10% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        .admin-modal-content h2 {
+            margin-bottom: 15px;
+            color: var(--purple-light);
+        }
+        .admin-modal-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: color 0.3s;
+        }
+        .admin-modal-close:hover {
+            color: var(--purple-light);
+        }
+        
+        /* Animations */
+        @keyframes float {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+    
+    <div class="admin-container">
+        <div class="admin-header">
+            <div class="admin-title">Settings</div>
+            <div class="admin-nav">
+                <a href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> User Dashboard</a>
+                <a href="{{ url_for('admin_dashboard') }}"><i class="fas fa-tachometer-alt"></i> Admin Dashboard</a>
+                <a href="{{ url_for('admin_users') }}"><i class="fas fa-users"></i> Users</a>
+                <a href="{{ url_for('admin_settings') }}" class="active"><i class="fas fa-cog"></i> Settings</a>
+                <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="admin-alert admin-alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="admin-card">
+            <div class="admin-card-title">System Settings</div>
+            <form class="admin-form" action="{{ url_for('admin_update_settings') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="admin-form-section">
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Registration</label>
+                        <div class="admin-toggle-label">
+                            <label class="admin-toggle">
+                                <input type="checkbox" name="allow_registration" {% if settings.allow_registration %}checked{% endif %}>
+                                <span class="admin-toggle-slider"></span>
+                            </label>
+                            <span>Allow new user registration</span>
+                        </div>
+                    </div>
+
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Captcha Settings</label>
+                        <div class="admin-toggle-label">
+                            <label class="admin-toggle">
+                                <input type="checkbox" name="require_captcha" {% if settings.require_captcha %}checked{% endif %}>
+                                <span class="admin-toggle-slider"></span>
+                            </label>
+                            <span>Require captcha for registration</span>
+                        </div>
+                    </div>
+
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">API Settings</label>
+                        <div class="admin-toggle-label">
+                            <label class="admin-toggle">
+                                <input type="checkbox" name="enable_api" {% if settings.enable_api %}checked{% endif %}>
+                                <span class="admin-toggle-slider"></span>
+                            </label>
+                            <span>Enable API access</span>
+                        </div>
+                    </div>
+
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Default Credits</label>
+                        <input type="number" name="default_credits" class="admin-form-input" value="{{ settings.default_credits }}" step="0.1" min="0" required>
+                    </div>
+
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Credit Cost per Task</label>
+                        <input type="number" name="credit_cost" class="admin-form-input" value="{{ settings.credit_cost }}" step="0.1" min="0" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="admin-btn">Save Settings</button>
+            </form>
+        </div>
+
+        <div class="admin-card">
+            <div class="admin-card-title">Danger Zone</div>
+            <div class="admin-form">
+                <div class="admin-form-section">
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">Database</label>
+                        <button type="button" class="admin-btn admin-btn-danger" onclick="showBackupModal()">
+                            <i class="fas fa-download"></i> Backup Database
+                        </button>
+                    </div>
+
+                    <div class="admin-form-group">
+                        <label class="admin-form-label">System</label>
+                        <button type="button" class="admin-btn admin-btn-danger" onclick="showResetModal()">
+                            <i class="fas fa-trash"></i> Reset All Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Modal -->
+    <div id="backupModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="admin-modal-close" onclick="closeModal('backupModal')">&times;</span>
+            <h2>Backup Database</h2>
+            <p>This will create a backup of the current database. The backup will be downloaded automatically.</p>
+            <form class="admin-form" action="{{ url_for('admin_backup_database') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="admin-btn">Create Backup</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset Modal -->
+    <div id="resetModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="admin-modal-close" onclick="closeModal('resetModal')">&times;</span>
+            <h2>Reset Settings</h2>
+            <p>Are you sure you want to reset all settings to their default values? This action cannot be undone.</p>
+            <form class="admin-form" action="{{ url_for('admin_reset_settings') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="admin-btn admin-btn-danger">Reset Settings</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showBackupModal() {
+            document.getElementById('backupModal').style.display = 'block';
+        }
+
+        function showResetModal() {
+            document.getElementById('resetModal').style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target.className === 'admin-modal') {
+                event.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 

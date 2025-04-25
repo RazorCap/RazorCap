@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorCap Admin - User Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-bg: #0a0a0a;
+            --purple-primary: #6b21a8;
+            --purple-secondary: #581c87;
+            --purple-accent: #7e22ce;
+            --purple-light: #a855f7;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --gradient-primary: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .gradient-sphere-global {
+            position: absolute;
+            top: 50%;
+            right: -20%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle at center, rgba(107, 33, 168, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: float 10s infinite alternate;
+        }
+
+        .gradient-lines-global {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(107, 33, 168, 0.05) 10px,
+                rgba(107, 33, 168, 0.05) 20px
+            );
+        }
+
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-top: 60px;
+        }
+        .admin-title {
+            font-size: 24px;
+            font-weight: bold;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .admin-nav {
+            display: flex;
+            gap: 15px;
+        }
+        .admin-nav a {
+            padding: 8px 15px;
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.3s;
+            border: 1px solid var(--card-border);
+        }
+        .admin-nav a:hover {
+            background-color: rgba(107, 33, 168, 0.2);
+            border-color: var(--purple-light);
+        }
+        .admin-nav a.active {
+            background-color: rgba(107, 33, 168, 0.3);
+            border-color: var(--purple-light);
+        }
+        .admin-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .admin-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(107, 33, 168, 0.2);
+        }
+        .admin-card-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--purple-light);
+        }
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .admin-table th, .admin-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .admin-table th {
+            background: rgba(107, 33, 168, 0.2);
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        .admin-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .admin-form {
+            display: grid;
+            gap: 15px;
+        }
+        .admin-form-group {
+            display: grid;
+            gap: 5px;
+        }
+        .admin-form-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .admin-form-input {
+            padding: 8px 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 4px;
+            color: var(--text-primary);
+        }
+        .admin-form-input:focus {
+            outline: none;
+            border-color: var(--purple-light);
+        }
+        .admin-btn {
+            padding: 8px 15px;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .admin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(107, 33, 168, 0.4);
+        }
+        .admin-btn-danger {
+            background: linear-gradient(135deg, #e53e3e, #c53030);
+        }
+        .admin-btn-danger:hover {
+            background: linear-gradient(135deg, #c53030, #9b2c2c);
+        }
+        .admin-btn-success {
+            background: linear-gradient(135deg, #38a169, #2f855a);
+        }
+        .admin-btn-success:hover {
+            background: linear-gradient(135deg, #2f855a, #276749);
+        }
+        .admin-alert {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .admin-alert-success {
+            background: rgba(56, 161, 105, 0.2);
+            border: 1px solid #38a169;
+            color: #38a169;
+        }
+        .admin-alert-error {
+            background: rgba(229, 62, 62, 0.2);
+            border: 1px solid #e53e3e;
+            color: #e53e3e;
+        }
+        .admin-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .admin-badge-admin {
+            background-color: var(--purple-accent);
+            color: white;
+        }
+        .admin-badge-user {
+            background-color: var(--purple-light);
+            color: white;
+        }
+        .admin-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .admin-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+        }
+        .admin-modal-content {
+            position: relative;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            margin: 10% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        .admin-modal-content h2 {
+            margin-bottom: 15px;
+            color: var(--purple-light);
+        }
+        .admin-modal-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: color 0.3s;
+        }
+        .admin-modal-close:hover {
+            color: var(--purple-light);
+        }
+        .admin-search {
+            margin-bottom: 20px;
+        }
+        .admin-search input {
+            width: 100%;
+            padding: 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            transition: all 0.3s;
+        }
+        .admin-search input:focus {
+            outline: none;
+            border-color: var(--purple-light);
+            box-shadow: 0 0 0 2px rgba(107, 33, 168, 0.2);
+        }
+        
+        /* Animations */
+        @keyframes float {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+    
+    <div class="admin-container">
+        <div class="admin-header">
+            <div class="admin-title">User Management</div>
+            <div class="admin-nav">
+                <a href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> User Dashboard</a>
+                <a href="{{ url_for('admin_dashboard') }}"><i class="fas fa-tachometer-alt"></i> Admin Dashboard</a>
+                <a href="{{ url_for('admin_users') }}" class="active"><i class="fas fa-users"></i> Users</a>
+                <a href="{{ url_for('admin_settings') }}"><i class="fas fa-cog"></i> Settings</a>
+                <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="admin-alert admin-alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="admin-card">
+            <div class="admin-card-title">Users</div>
+            <div class="admin-search">
+                <input type="text" id="userSearch" placeholder="Search users..." onkeyup="searchUsers()">
+            </div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Created</th>
+                        <th>Last Login</th>
+                        <th>Role</th>
+                        <th>Balance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user[0] }}</td>
+                        <td>{{ user[1] }}</td>
+                        <td>{{ user[2]|timestamp_to_date }}</td>
+                        <td>{{ user[3]|timestamp_to_date }}</td>
+                        <td>
+                            {% if user[4] %}
+                            <span class="admin-badge admin-badge-admin">Admin</span>
+                            {% else %}
+                            <span class="admin-badge admin-badge-user">User</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user[5] }}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn" onclick="showAddCreditsModal({{ user[0] }})">
+                                    <i class="fas fa-plus"></i> Add Credits
+                                </button>
+                                <button class="admin-btn" onclick="showResetApiKeyModal({{ user[0] }})">
+                                    <i class="fas fa-key"></i> Reset API Key
+                                </button>
+                                <button class="admin-btn admin-btn-danger" onclick="showDeleteUserModal({{ user[0] }})">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add Credits Modal -->
+    <div id="addCreditsModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="admin-modal-close" onclick="closeModal('addCreditsModal')">&times;</span>
+            <h2>Add Credits</h2>
+            <form class="admin-form" action="{{ url_for('admin_add_credits') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="user_id" id="addCreditsUserId">
+                <div class="admin-form-group">
+                    <label class="admin-form-label">Amount</label>
+                    <input type="number" name="amount" class="admin-form-input" step="0.1" min="0.1" required>
+                </div>
+                <button type="submit" class="admin-btn admin-btn-success">Add Credits</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset API Key Modal -->
+    <div id="resetApiKeyModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="admin-modal-close" onclick="closeModal('resetApiKeyModal')">&times;</span>
+            <h2>Reset API Key</h2>
+            <p>Are you sure you want to reset this user's API key? This will invalidate their current key.</p>
+            <form class="admin-form" action="{{ url_for('admin_reset_api_key') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="user_id" id="resetApiKeyUserId">
+                <button type="submit" class="admin-btn admin-btn-danger">Reset API Key</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete User Modal -->
+    <div id="deleteUserModal" class="admin-modal">
+        <div class="admin-modal-content">
+            <span class="admin-modal-close" onclick="closeModal('deleteUserModal')">&times;</span>
+            <h2>Delete User</h2>
+            <p>Are you sure you want to delete this user? This action cannot be undone.</p>
+            <form class="admin-form" action="{{ url_for('admin_delete_user') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="user_id" id="deleteUserId">
+                <button type="submit" class="admin-btn admin-btn-danger">Delete User</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showAddCreditsModal(userId) {
+            document.getElementById('addCreditsUserId').value = userId;
+            document.getElementById('addCreditsModal').style.display = 'block';
+        }
+
+        function showResetApiKeyModal(userId) {
+            document.getElementById('resetApiKeyUserId').value = userId;
+            document.getElementById('resetApiKeyModal').style.display = 'block';
+        }
+
+        function showDeleteUserModal(userId) {
+            document.getElementById('deleteUserId').value = userId;
+            document.getElementById('deleteUserModal').style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function searchUsers() {
+            const input = document.getElementById('userSearch');
+            const filter = input.value.toLowerCase();
+            const table = document.querySelector('.admin-table');
+            const rows = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < rows.length; i++) {
+                const username = rows[i].getElementsByTagName('td')[1];
+                if (username) {
+                    const text = username.textContent || username.innerText;
+                    if (text.toLowerCase().indexOf(filter) > -1) {
+                        rows[i].style.display = '';
+                    } else {
+                        rows[i].style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target.className === 'admin-modal') {
+                event.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 

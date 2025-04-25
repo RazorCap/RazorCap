@@ -36,6 +36,8 @@
                 {% endif %}
 
                 <form method="POST" action="/register" id="registerForm">
+                    <!-- CSRF Token -->
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="form-group">
                         <label for="username">Username</label>

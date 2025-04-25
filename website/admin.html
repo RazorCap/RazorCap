@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorCap Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-bg: #0a0a0a;
+            --purple-primary: #6b21a8;
+            --purple-secondary: #581c87;
+            --purple-accent: #7e22ce;
+            --purple-light: #a855f7;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --gradient-primary: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .page-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .gradient-sphere-global {
+            position: absolute;
+            top: 50%;
+            right: -20%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle at center, rgba(107, 33, 168, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: float 10s infinite alternate;
+        }
+
+        .gradient-lines-global {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(107, 33, 168, 0.05) 10px,
+                rgba(107, 33, 168, 0.05) 20px
+            );
+        }
+
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-top: 60px;
+        }
+        .admin-title {
+            font-size: 24px;
+            font-weight: bold;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .admin-nav {
+            display: flex;
+            gap: 15px;
+        }
+        .admin-nav a {
+            padding: 8px 15px;
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.3s;
+            border: 1px solid var(--card-border);
+        }
+        .admin-nav a:hover {
+            background-color: rgba(107, 33, 168, 0.2);
+            border-color: var(--purple-light);
+        }
+        .admin-nav a.active {
+            background-color: rgba(107, 33, 168, 0.3);
+            border-color: var(--purple-light);
+        }
+        .admin-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .admin-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(107, 33, 168, 0.2);
+        }
+        .admin-card-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--purple-light);
+        }
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .admin-stat {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .admin-stat:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(107, 33, 168, 0.2);
+            border-color: var(--purple-light);
+        }
+        .admin-stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--purple-light);
+        }
+        .admin-stat-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .admin-table th, .admin-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .admin-table th {
+            background: rgba(107, 33, 168, 0.2);
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        .admin-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .admin-form {
+            display: grid;
+            gap: 15px;
+        }
+        .admin-form-group {
+            display: grid;
+            gap: 5px;
+        }
+        .admin-form-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .admin-form-input {
+            padding: 8px 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 4px;
+            color: var(--text-primary);
+        }
+        .admin-form-input:focus {
+            outline: none;
+            border-color: var(--purple-light);
+        }
+        .admin-btn {
+            padding: 8px 15px;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .admin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(107, 33, 168, 0.4);
+        }
+        .admin-btn-danger {
+            background: linear-gradient(135deg, #e53e3e, #c53030);
+        }
+        .admin-btn-danger:hover {
+            background: linear-gradient(135deg, #c53030, #9b2c2c);
+        }
+        .admin-btn-success {
+            background: linear-gradient(135deg, #38a169, #2f855a);
+        }
+        .admin-btn-success:hover {
+            background: linear-gradient(135deg, #2f855a, #276749);
+        }
+        .admin-alert {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .admin-alert-success {
+            background: rgba(56, 161, 105, 0.2);
+            border: 1px solid #38a169;
+            color: #38a169;
+        }
+        .admin-alert-error {
+            background: rgba(229, 62, 62, 0.2);
+            border: 1px solid #e53e3e;
+            color: #e53e3e;
+        }
+        .admin-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .admin-badge-admin {
+            background-color: var(--purple-accent);
+            color: white;
+        }
+        .admin-badge-user {
+            background-color: var(--purple-light);
+            color: white;
+        }
+        .admin-badge-success {
+            background-color: #38a169;
+            color: white;
+        }
+        .admin-badge-error {
+            background-color: #e53e3e;
+            color: white;
+        }
+        .admin-badge-pending {
+            background-color: #d69e2e;
+            color: white;
+        }
+        
+        /* Animations */
+        @keyframes float {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+    
+    <div class="admin-container">
+        <div class="admin-header">
+            <div class="admin-title">RazorCap Admin Dashboard</div>
+            <div class="admin-nav">
+                <a href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> User Dashboard</a>
+                <a href="{{ url_for('admin_dashboard') }}" class="active"><i class="fas fa-tachometer-alt"></i> Admin Dashboard</a>
+                <a href="{{ url_for('admin_users') }}"><i class="fas fa-users"></i> Users</a>
+                <a href="{{ url_for('admin_settings') }}"><i class="fas fa-cog"></i> Settings</a>
+                <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="admin-alert admin-alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="admin-grid">
+            <div class="admin-stat">
+                <div class="admin-stat-value">{{ users|length }}</div>
+                <div class="admin-stat-label">Total Users</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-value">{{ tasks|length }}</div>
+                <div class="admin-stat-label">Recent Tasks</div>
+            </div>
+            <div class="admin-stat">
+                <div class="admin-stat-value">{{ transactions|length }}</div>
+                <div class="admin-stat-label">Recent Transactions</div>
+            </div>
+        </div>
+
+        <div class="admin-card">
+            <div class="admin-card-title">Recent Users</div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Created</th>
+                        <th>Last Login</th>
+                        <th>Role</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users[:5] %}
+                    <tr>
+                        <td>{{ user[0] }}</td>
+                        <td>{{ user[1] }}</td>
+                        <td>{{ user[2]|timestamp_to_date }}</td>
+                        <td>{{ user[3]|timestamp_to_date }}</td>
+                        <td>
+                            {% if user[4] %}
+                            <span class="admin-badge admin-badge-admin">Admin</span>
+                            {% else %}
+                            <span class="admin-badge admin-badge-user">User</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="margin-top: 15px; text-align: right;">
+                <a href="{{ url_for('admin_users') }}" class="admin-btn">View All Users</a>
+            </div>
+        </div>
+
+        <div class="admin-card">
+            <div class="admin-card-title">Recent Transactions</div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Amount</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in transactions %}
+                    <tr>
+                        <td>{{ transaction[0] }}</td>
+                        <td>{{ transaction[1] }}</td>
+                        <td>{{ transaction[2] }}</td>
+                        <td>
+                            {% if transaction[3] == 'credit' %}
+                            <span class="admin-badge admin-badge-success">Credit</span>
+                            {% else %}
+                            <span class="admin-badge admin-badge-error">Debit</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ transaction[4] }}</td>
+                        <td>{{ transaction[5]|timestamp_to_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="admin-card">
+            <div class="admin-card-title">Recent Tasks</div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Task ID</th>
+                        <th>User</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in tasks %}
+                    <tr>
+                        <td>{{ task[0] }}</td>
+                        <td>{{ task[1] }}</td>
+                        <td>{{ task[2] }}</td>
+                        <td>
+                            {% if task[3] == 'solved' %}
+                            <span class="admin-badge admin-badge-success">Solved</span>
+                            {% elif task[3] == 'error' %}
+                            <span class="admin-badge admin-badge-error">Error</span>
+                            {% else %}
+                            <span class="admin-badge admin-badge-pending">Solving</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ task[4]|timestamp_to_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="admin-card">
+            <div class="admin-card-title">System Settings</div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Setting</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for setting in settings %}
+                    <tr>
+                        <td>{{ setting[0] }}</td>
+                        <td>{{ setting[1] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="margin-top: 15px; text-align: right;">
+                <a href="{{ url_for('admin_settings') }}" class="admin-btn">Edit Settings</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html> 
