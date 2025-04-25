@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="RazorCap - Fast & Affordable Captcha Solving Service.">
+    <meta property="og:image" content="static/cap.png">
+    <meta name="twitter:image" content="static/cap.png">
+
+    <title>RazorCap - Captcha Solver</title>
+    <link rel="stylesheet" type="text/css" href="static/index.css">
+    <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+
+    <!-- FP Stealer -->
+</head>
+
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="static/cap.png" alt="RazorCap Logo" class="logo-img">
+                <button class="logo-button" onclick="window.location.href='/'">
+                    <span class="logo-text">RazorCap</span>
+                </button>
+            </div>
+
+            <div class="nav-links">
+                <a href="/pricing" class="nav-link"><span>Pricing</span></a>
+                <a href="/terms" class="nav-link"><span>Terms</span></a>
+                <a href="https://docs.razorcap.xyz" class="nav-link"><span>Documentation</span></a>
+            </div>
+
+            <div class="nav-auth">
+                <a href="/dashboard" class="btn-login">Dashboard</a>
+                <a href="/register" class="btn-register">Get Started</a>
+            </div>
+
+            <button class="menu-toggle" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    
+
+    <section class="hero">
+        <div class="hero-grid">
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <span class="badge-icon">⚡</span>
+                    RazorCap
+                </div>
+
+                <h1 class="hero-title">
+                    Fast & Affordable <span class="gradient-text">Captcha</span> Solving Service
+                </h1>
+
+                <p class="hero-subtitle">
+                    Look no further! RazorCap offers lightning-fast solutions at unbeatable prices for both hCaptcha and
+                    Cloudflare Turnstile!.
+                </p>
+
+
+
+
+                <div class="hero-cta">
+                    <a href="/register" class="btn-primary">
+                        Get Started
+                        <div class="btn-shine"></div>
+                    </a>
+
+                    <a href="https://discord.com/invite/razorcap" class="btn-secondary">
+                        <img src="static/discord-logo.png" alt="Discord Logo"
+                            class="play-icon">
+                        Discord
+                    </a>
+                </div>
+
+                <!-- <div class="hero-stats">
+                    <div class="stat">
+                        <span class="stat-number">99%</span>
+                        <span class="stat-label">Uptime</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat">
+                        <span class="stat-number">>10s</span>
+                        <span class="stat-label">Average Speed </span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat">
+                        <span class="stat-number">100+</span>
+                        <span class="stat-label">Active Users</span>
+                    </div>
+                </div> -->
+            </div>
+
+            <div class="code-preview">
+                <div class="code-header">
+                    <div class="code-dot"></div>
+                    <div class="code-dot"></div>
+                    <div class="code-dot"></div>
+                </div>
+                <div class="code-content">
+                    <pre>
+'key': "api_key", // RazorCap api key
+'type': "hcaptcha_basic", // hcaptcha_basic or enterprise only 
+'data': {
+    'sitekey': "a9b5fb07-92ff-493f-86fe-352a2803b3df", // website's sitekey
+    'siteurl': "discord.com", // siteurl must be like this only 
+    'proxy': "http://user:pass@ip:port", // must be http://user:pass@ip:port or ip:port format
+    'rqdata': "captcha_rqdata" // optional
+}                    
+                    </pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="stats">
+        <div class="stat-item">
+            <h3>99%</h3>
+            <p>Uptime</p>
+        </div>
+        <div class="stat-item">
+            <h3>&lt;10s</h3>
+            <p>Average Response</p>
+        </div>
+        <div class="stat-item">
+            <h3>100+</h3>
+            <p>Active Users</p>
+        </div>
+    </section>
+
+    <section class="features">
+        <h2>Why Choose RazorCap?</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Lightning Fast</h3>
+                <p>Ultra-fast solving in just 5–10 seconds, ensuring seamless user experiences.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💸</div>
+                <h3>Affordable Pricing</h3>
+                <p>Unbeatable rates starting at $1 per 1,000 solves for Cloudflare Turnstile.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Real-Time Analytics</h3>
+                <p>Monitor and track detailed performance metrics instantly.</p>
+            </div>
+        </div>
+    </section>
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>RazorCap</h3>
+                <p>Fast & Affordable Captcha Solving Service</p>
+            </div>
+            <div class="footer-section">
+                <h3>Company</h3>
+                <a href="https://discord.com/invite/razorcap">Contact</a>
+                <a href="/terms">Terms</a>
+            </div>
+            <div class="footer-section">
+                <h3>Resources</h3>
+                <a href="https://docs.razorcap.xyz">Documentation</a>
+                <a href="https://docs.razorcap.xyz/hcaptcha">API Reference</a>
+                <a href="https://discord.com/channels/1348999675990114304/1349000680840495134">Status</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 RazorCap. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

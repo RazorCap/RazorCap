@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorCap - Login</title>
+
+    <link rel="stylesheet" href="static/login.css">
+    <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+</head>
+
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <div class="logo-dot"></div>
+                <a href="/" class="logo-text">RazorCap</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="login-section">
+        <div class="login-container">
+            
+            <div class="login-card">
+                <h2>Welcome Back</h2>
+                <p class="subtitle">Sign in to your RazorCap account</p>
+
+                {% if error_message %}
+                <div class="error-message">{{ error_message }}</div>
+                {% endif %}
+
+                <form method="POST" action="/login" id="loginForm">
+
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="username" id="username" name="username" placeholder="Enter your username">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="password-input">
+                            <input type="password" id="password" name="password" placeholder="Enter your password"
+                                required aria-label="Password">
+                            <button type="button" class="toggle-password" aria-label="Toggle password visibility"
+                                aria-pressed="false">
+                                <svg class="eye-visible" viewBox="0 0 24 24">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                                <svg class="eye-hidden" viewBox="0 0 24 24" style="display: none;">
+                                    <path
+                                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                    </path>
+                                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="remember-forgot">
+                        <label class="remember-me">
+                            <input type="checkbox" id="remember">
+                            <span>Remember me</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="login-button">
+                        Sign In
+                        <div class="btn-shine"></div>
+                    </button>
+                </form>
+
+                <div class="signup-prompt">
+                    <p>Don't have an account? <a href="/register">Sign up</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('loginForm');
+            const toggleButton = document.querySelector('.toggle-password');
+            const passwordInput = document.getElementById('password');
+            const eyeVisible = document.querySelector('.eye-visible');
+            const eyeHidden = document.querySelector('.eye-hidden');
+
+            function handlePasswordToggle() {
+                const isPassword = passwordInput.type === 'password';
+                passwordInput.type = isPassword ? 'text' : 'password';
+                eyeVisible.style.display = isPassword ? 'none' : 'block';
+                eyeHidden.style.display = isPassword ? 'block' : 'none';
+                toggleButton.setAttribute('aria-pressed', isPassword);
+            }
+
+            function handlePasswordToggleKeydown(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handlePasswordToggle();
+                }
+            }
+
+            function showError(message) {
+                let errorDiv = document.querySelector('.error-message');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-message';
+                    const loginCard = document.querySelector('.login-card');
+                    loginCard.insertBefore(errorDiv, loginCard.firstChild);
+                }
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+
+            function clearError() {
+                const errorDiv = document.querySelector('.error-message');
+                if (errorDiv && !errorDiv.getAttribute('server-error')) {
+                    errorDiv.remove();
+                }
+            }
+
+            async function handleFormSubmit(e) {
+                e.preventDefault();
+                clearError();
+
+                const username = document.getElementById('username').value;
+                const password = passwordInput.value;
+
+                if (!username || !password) {
+                    showError('Both fields are required.');
+                    return;
+                }
+
+                const submitButton = form.querySelector('.login-button');
+                const originalButtonText = submitButton.textContent;
+                submitButton.disabled = true;
+                submitButton.textContent = 'Signing in...';
+
+                try {
+                    const formData = new FormData(form);
+                    const response = await fetch('/login', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.redirected) {
+                        if (document.getElementById('remember').checked) {
+                            localStorage.setItem('rememberedUsername', username);
+                        } else {
+                            localStorage.removeItem('rememberedUsername');
+                        }
+                        window.location.href = response.url;
+                        return;
+                    }
+
+                    const data = await response.text();
+
+                    if (data.includes('error-message')) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = data;
+                        const errorMessage = tempDiv.querySelector('.error-message')?.textContent;
+                        if (errorMessage) {
+                            showError(errorMessage.trim());
+                        }
+                    }
+                } catch (error) {
+                    showError('An error occurred. Please try again later.');
+                    console.error('Login error:', error);
+                } finally {
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalButtonText;
+                }
+            }
+
+            toggleButton?.addEventListener('click', handlePasswordToggle);
+            toggleButton?.addEventListener('keydown', handlePasswordToggleKeydown);
+            form?.addEventListener('submit', handleFormSubmit);
+
+            const rememberedUsername = localStorage.getItem('rememberedUsername');
+            if (rememberedUsername) {
+                document.getElementById('username').value = rememberedUsername;
+                document.getElementById('remember').checked = true;
+            }
+        });
+    </script>
+</body>
+</html>

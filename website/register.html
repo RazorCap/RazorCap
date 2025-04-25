@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorCap - Register</title>
+    <link rel="stylesheet" href="static/register.css">
+    <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+</head>
+
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+
+    <nav class="navbar nav">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <div class="logo-dot"></div>
+                <a href="/" class="logo-text">RazorCap</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="register-section">
+        <div class="register-container">
+            
+            <div class="register-card">
+                <h2>Create Your Account</h2>
+                <p class="subtitle">Sign up to access your account</p>
+
+                {% if error_message %}
+                <div class="error-message">{{ error_message }}</div>
+                {% endif %}
+
+                <form method="POST" action="/register" id="registerForm">
+
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" required placeholder="Enter your username"
+                            aria-label="Username">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <div class="password-input">
+                            <input type="password" id="password" name="password" required
+                                placeholder="Enter your password" aria-label="Password">
+                            <button type="button" class="toggle-password" aria-label="Toggle password visibility"
+                                aria-pressed="false">
+                                <svg class="eye-visible" viewBox="0 0 24 24">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                                <svg class="eye-hidden" viewBox="0 0 24 24" style="display: none;">
+                                    <path
+                                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                    </path>
+                                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm_password">Confirm Password</label>
+                        <div class="password-input">
+                            <input type="password" id="confirm_password" name="confirm_password" required
+                                placeholder="Re-enter your password" aria-label="Confirm Password">
+                            <button type="button" class="toggle-password" aria-label="Toggle password visibility"
+                                aria-pressed="false">
+                                <svg class="eye-visible" viewBox="0 0 24 24">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                                <svg class="eye-hidden" viewBox="0 0 24 24" style="display: none;">
+                                    <path
+                                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+                                    </path>
+                                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group captcha-container">
+                        <div class="h-captcha" data-sitekey="0a1a7e5e-4c58-4a68-8830-56ae84644272" data-theme="dark">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="register-button">
+                        Sign Up
+                        <div class="btn-shine"></div>
+                    </button>
+                </form>
+
+                <div class="login-prompt">
+                    <p>Already have an account? <a href="/login">Log in</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const setupPasswordToggle = (toggleButton, passwordInput) => {
+                const eyeVisible = toggleButton.querySelector('.eye-visible');
+                const eyeHidden = toggleButton.querySelector('.eye-hidden');
+
+                const toggleVisibility = () => {
+                    const isPassword = passwordInput.type === 'password';
+                    passwordInput.type = isPassword ? 'text' : 'password';
+
+                    eyeVisible.style.display = isPassword ? 'none' : 'block';
+                    eyeHidden.style.display = isPassword ? 'block' : 'none';
+
+                    toggleButton.setAttribute('aria-pressed', isPassword.toString());
+                };
+
+                toggleButton.addEventListener('click', toggleVisibility);
+
+                toggleButton.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleVisibility();
+                    }
+                });
+            };
+
+            document.querySelectorAll('.password-input').forEach(container => {
+                const toggleButton = container.querySelector('.toggle-password');
+                const passwordInput = container.querySelector('input');
+                if (toggleButton && passwordInput) {
+                    setupPasswordToggle(toggleButton, passwordInput);
+                }
+            });
+
+            const form = document.getElementById('registerForm');
+            const showError = (message) => {
+                let errorDiv = document.querySelector('.error-message');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-message';
+                    const registerCard = document.querySelector('.register-card');
+                    registerCard.insertBefore(errorDiv, registerCard.firstChild);
+                }
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            };
+
+            form?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirm_password').value;
+
+                if (!username || !password || !confirmPassword) {
+                    showError('All fields are required.');
+                    return;
+                }
+
+                if (password !== confirmPassword) {
+                    showError('Passwords do not match.');
+                    return;
+                }
+
+                const submitButton = form.querySelector('.register-button');
+                const originalButtonText = submitButton.textContent;
+                submitButton.disabled = true;
+                submitButton.textContent = 'Signing up...';
+
+                try {
+                    const formData = new FormData(form);
+                    const response = await fetch('/register', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                        return;
+                    }
+
+                    const data = await response.text();
+
+                    if (data.includes('error-message')) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = data;
+                        const errorMessage = tempDiv.querySelector('.error-message')?.textContent;
+                        if (errorMessage) {
+                            showError(errorMessage.trim());
+                        }
+                    }
+                } catch (error) {
+                    showError('An error occurred. Please try again.');
+                    console.error('Registration error:', error);
+                } finally {
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalButtonText;
+                }
+            });
+        });
+
+    </script>
+</body>
+
+</html>

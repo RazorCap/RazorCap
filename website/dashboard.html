@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorCap Dashboard</title>
+    <link rel="stylesheet" href="static/dashboard.css">
+    <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+</head>
+
+<body>
+    <div class="page-background">
+        <div class="gradient-sphere-global"></div>
+        <div class="gradient-lines-global"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <div class="logo-dot"></div>
+                <button class="logo-button" onclick="window.location.href='/'">
+                    <span class="logo-text">RazorCap</span>
+                </button>
+            </div>
+            <div class="nav-profile">
+                <span class="username" id="username">Loading...</span>
+                <button class="logout-btn" onclick="logout()">
+                    <span class="logout-icon">↪</span>
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <h3>Balance</h3>
+                    <p>$<span id="currentBalance">0.00</span></p>
+                </div>
+                <button class="button-secondary" onclick="topUpBalance()">Top Up</button>
+            </div>
+    
+            <div class="stat-card">
+                <div class="stat-icon">🔑</div>
+                <div class="stat-content">
+                    <h3>API Key</h3>
+                    <div class="api-key-display">
+                        <span id="apiKey">Loading...</span>
+                        <button class="icon-button" onclick="copyToClipboard()">📋</button>
+                    </div>
+                </div>
+                <button class="button-secondary" onclick="resetKey()">Reset Key</button>
+            </div>
+                    
+            <div class="stat-card support-card">
+                <div class="stat-icon">🔧</div>
+                <div class="stat-content">
+                    <h3>Need Support?</h3>
+                    <p style="color: #a855f7;">Get instant support</p>
+                </div>
+                <div class="discord-link">
+                    <a href="https://discord.gg/razorcap" target="_blank">Join Discord</a>
+                </div>
+            </div>
+        </div>
+        <div class="activity-section">
+            <h2>Recent Tasks</h2>
+            <div class="task-list" id="recent-tasks-container">
+                <div class="no-tasks" id="no-recent-tasks">Loading recent tasks...</div>
+            </div>
+        </div>
+        
+        <div class="stats-section">
+            <h2>Usage Statistics</h2>
+            <div class="stats-grid-small">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <h3>Today's Requests</h3>
+                        <p><span id="today-usage">0</span></p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-content">
+                        <h3>Success Rate</h3>
+                        <p><span id="success-rate">0%</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="task-history-section">
+            <h2>Task History</h2>
+            <div class="task-filters">
+                <div class="filter-group">
+                    <label for="date-filter">Time Period:</label>
+                    <select id="date-filter" onchange="filterTasks()">
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="week">Last 7 Days</option>
+                        <option value="month">Last 30 Days</option>
+                        <option value="all" selected>All Time</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="status-filter">Status:</label>
+                    <select id="status-filter" onchange="filterTasks()">
+                        <option value="all" selected>All</option>
+                        <option value="success">Success</option>
+                        <option value="failed">Failed</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+                <button class="refresh-btn" onclick="loadTaskHistory()">
+                    <span class="refresh-icon">↻</span>
+                    Refresh
+                </button>
+            </div>
+            
+            <div class="task-table-container">
+                <table class="task-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Task ID</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="task-table-body">
+                        <!-- Tasks will be loaded here -->
+                    </tbody>
+                </table>
+                <div id="no-tasks-message" class="no-tasks-message">No tasks match your filters</div>
+                <div class="pagination">
+                    <button id="prev-page" onclick="changePage(-1)" disabled>Previous</button>
+                    <span id="page-info">Page 1 of 1</span>
+                    <button id="next-page" onclick="changePage(1)" disabled>Next</button>
+                </div>
+            </div>
+        </div>
+            
+
+    <!-- Modals -->
+<!-- Top-Up Modal -->
+<div id="topUpModal" class="modal">
+    <div class="modal-content">
+        <h2>Top Up Balance</h2>
+        <div class="amount-options">
+            <button class="amount-option" data-amount="10">$10</button>
+            <button class="amount-option" data-amount="25">$25</button>
+            <button class="amount-option" data-amount="50">$50</button>
+            <button class="amount-option" data-amount="100">$100</button>
+        </div>
+        <div class="custom-amount">
+            <input type="number" id="customAmount" placeholder="Custom amount (min $5)" min="5">
+        </div>
+        <div class="coupon-section">
+            <input type="text" id="couponCode" placeholder="Enter coupon code" class="coupon-input">
+            <button class="button-secondary" onclick="validateCoupon()">Apply Code</button>
+            <div id="couponStatus" class="coupon-status"></div>
+        </div>
+        <div class="price-breakdown" id="priceBreakdown" style="display: none;">
+            <div class="breakdown-row">
+                <span>Subtotal:</span>
+                <span id="subtotalAmount">$0.00</span>
+            </div>
+            <div class="breakdown-row">
+                <span>Discount:</span>
+                <span id="discountAmount">-$0.00</span>
+            </div>
+            <div class="breakdown-row total">
+                <span>Total:</span>
+                <span id="totalAmount">$0.00</span>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="button-primary" onclick="processTopUp()">Proceed to Payment</button>
+            <button class="button-secondary" onclick="closeModal('topUpModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+    <div id="resetKeyModal" class="modal">
+        <div class="modal-content">
+            <h2>Reset API Key</h2>
+            <p class="modal-message">Are you sure you want to reset your API key? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button class="button-primary" onclick="confirmResetKey()">Reset Key</button>
+                <button class="button-secondary" onclick="closeModal('resetKeyModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+let currentCoupon = null;
+let currentAmount = 0;
+
+function copyToClipboard() {
+    const apiKey = document.getElementById('apiKey').innerText;
+
+    if (!navigator.clipboard) {
+        const textArea = document.createElement('textarea');
+        textArea.value = apiKey;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+
+        try {
+            document.execCommand('copy');
+            showToast('API key copied to clipboard');
+        } catch (err) {
+            showToast('Failed to copy API key', 'error');
+            console.error('Failed to copy:', err);
+        }
+
+        document.body.removeChild(textArea);
+    } else {
+        navigator.clipboard.writeText(apiKey)
+            .then(() => showToast('API key copied to clipboard'))
+            .catch(err => {
+                showToast('Failed to copy API key', 'error');
+                console.error('Failed to copy:', err);
+            });
+    }
+}
+
+function resetKey() {
+    document.getElementById('resetKeyModal').style.display = 'block';
+}
+
+function confirmResetKey() {
+    const apiKeyElem = document.getElementById('apiKey');
+    const apiKeyContent = apiKeyElem.textContent;
+    apiKeyElem.parentElement.classList.add('loading');
+
+    fetch('/reset_key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: apiKeyContent })
+    })
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            apiKeyElem.parentElement.classList.remove('loading');
+            if (data.status === 'success') {
+                apiKeyElem.textContent = data.new_key;
+                showToast('API key reset successfully');
+                closeModal('resetKeyModal');
+            } else {
+                throw new Error(data.message || 'Failed to reset API key');
+            }
+        })
+        .catch(error => {
+            apiKeyElem.parentElement.classList.remove('loading');
+            console.error('Error resetting API key:', error);
+            showToast(error.message, 'error');
+        });
+}
+
+async function updateUsageStats() {
+    try {
+        const apiKey = document.getElementById('apiKey').textContent.trim();
+        if (apiKey === 'Loading...') {
+            // If API key is not loaded yet, retry after a short delay
+            setTimeout(updateUsageStats, 1000);
+            return;
+        }
+        
+        // Update daily usage
+        try {
+            const dailyResponse = await fetch('/get_daily_usage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ key: apiKey }),
+            });
+            
+            const dailyData = await dailyResponse.json();
+            if (dailyData.status === 'success') {
+                const todayUsageElement = document.getElementById('today-usage');
+                if (todayUsageElement) {
+                    todayUsageElement.textContent = dailyData.daily_requests || '0';
+                }
+            } else {
+                console.error('Failed to load daily usage:', dailyData.message || 'Unknown error');
+                const todayUsageElement = document.getElementById('today-usage');
+                if (todayUsageElement) {
+                    todayUsageElement.textContent = '0';
+                }
+            }
+        } catch (dailyError) {
+            console.error('Error fetching daily usage:', dailyError);
+            const todayUsageElement = document.getElementById('today-usage');
+            if (todayUsageElement) {
+                todayUsageElement.textContent = '0';
+            }
+        }
+        
+        // Update success rate
+        try {
+            const successResponse = await fetch('/get_success_rate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ key: apiKey }),
+            });
+            
+            const successData = await successResponse.json();
+            if (successData.status === 'success') {
+                const successRateElement = document.getElementById('success-rate');
+                if (successRateElement) {
+                    const rate = successData.success_rate || 0;
+                    successRateElement.textContent = `${rate}%`;
+                }
+            } else {
+                console.error('Failed to load success rate:', successData.message || 'Unknown error');
+                const successRateElement = document.getElementById('success-rate');
+                if (successRateElement) {
+                    successRateElement.textContent = '0%';
+                }
+            }
+        } catch (successError) {
+            console.error('Error fetching success rate:', successError);
+            const successRateElement = document.getElementById('success-rate');
+            if (successRateElement) {
+                successRateElement.textContent = '0%';
+            }
+        }
+    } catch (error) {
+        console.error('Error updating usage statistics:', error);
+    }
+}
+
+function topUpBalance() {
+    const modal = document.getElementById('topUpModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+function updatePriceBreakdown(amount, discount = 0) {
+    const breakdownElement = document.getElementById('priceBreakdown');
+    const subtotalElement = document.getElementById('subtotalAmount');
+    const discountElement = document.getElementById('discountAmount');
+    const totalElement = document.getElementById('totalAmount');
+
+    if (amount > 0) {
+        breakdownElement.style.display = 'block';
+        subtotalElement.textContent = `$${amount.toFixed(2)}`;
+        discountElement.textContent = `-$${discount.toFixed(2)}`;
+        totalElement.textContent = `$${(amount - discount).toFixed(2)}`;
+    } else {
+        breakdownElement.style.display = 'none';
+    }
+    
+}
+
+function validateCoupon() {
+    const couponCode = document.getElementById('couponCode').value.trim();
+    const statusElement = document.getElementById('couponStatus');
+    const minAmount = 5;
+
+    if (!couponCode) {
+        statusElement.textContent = 'Please enter a coupon code';
+        statusElement.className = 'coupon-status invalid';
+        return;
+    }
+
+    fetch('/validate_coupon', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            coupon_code: couponCode,
+            key: document.getElementById('apiKey').textContent
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) { 
+            let discountAmount = data.discount_amount;
+            let finalAmount = currentAmount - discountAmount;
+
+            if (finalAmount < minAmount) {
+                statusElement.textContent = `Minimum total amount is $${minAmount}. Coupon not applied.`;
+                statusElement.className = 'coupon-status invalid';
+                currentCoupon = null;
+                updatePriceBreakdown(currentAmount, 0);
+            } else {
+                statusElement.textContent = `Coupon applied: ${data.description}`;
+                statusElement.className = 'coupon-status valid';
+                currentCoupon = {
+                    code: couponCode,
+                    amount: discountAmount
+                };
+                updatePriceBreakdown(currentAmount, discountAmount);
+            }
+        } else {
+            statusElement.textContent = data.message || 'Invalid coupon code';
+            statusElement.className = 'coupon-status invalid';
+            currentCoupon = null;
+            updatePriceBreakdown(currentAmount, 0);
+        }
+    })
+    .catch(error => {
+        console.error('Error validating coupon:', error);
+        statusElement.textContent = 'Error validating coupon';
+        statusElement.className = 'coupon-status invalid';
+        currentCoupon = null;
+    });
+}
+
+function processTopUp() {
+    const customAmountInput = document.getElementById('customAmount');
+    const selectedOption = document.querySelector('.amount-option.selected');
+    let amount = null;
+
+    if (customAmountInput && customAmountInput.value && !isNaN(customAmountInput.value)) {
+        amount = parseFloat(customAmountInput.value);
+    } else if (selectedOption) {
+        amount = parseFloat(selectedOption.dataset.amount);
+    }
+
+    if (!amount || amount < 5) {
+        showToast('Please select an amount or enter a valid custom amount (minimum $5)', 'error');
+        return;
+    }
+
+    const finalAmount = currentCoupon ? (amount - currentCoupon.amount) : amount;
+    if (finalAmount < 0) {
+        showToast('Discount cannot exceed the total amount', 'error');
+        return;
+    }
+
+    document.body.classList.add('loading');
+
+    fetch('/create_payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            key: document.getElementById('apiKey').textContent,
+            amount: amount,
+            coupon_code: currentCoupon?.code || null,
+            final_amount: finalAmount
+        })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.json();
+    })
+    .then(data => {
+        document.body.classList.remove('loading');
+        if (data.status === 'success') {
+            window.location.href = data.payment_link;
+            checkPaymentStatus(data.payment_id, finalAmount);
+        } else {
+            throw new Error(data.message || 'Payment processing failed');
+        }
+    })
+    .catch(error => {
+        document.body.classList.remove('loading');
+        console.error('Error processing top-up:', error);
+        showToast(error.message, 'error');
+    });
+}
+function checkPaymentStatus(payment_id, amount) {
+    const apiKey = document.getElementById('apiKey')?.textContent?.trim();
+    if (!payment_id || !amount || !apiKey) {
+        showToast('Invalid input. Please check payment ID, amount, and API key.', 'error');
+        return;
+    }
+
+    document.body.classList.add('loading');
+
+    fetch('/check_payment_status', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            payment_id: payment_id,
+            key: apiKey,
+            amount: amount,
+            coupon_code: currentCoupon?.code || null // Include coupon code if used
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Network error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        document.body.classList.remove('loading');
+        if (data.status === 'success') {
+            showToast(`Payment completed! Your new balance is: ${data.new_balance}`);
+
+            // ✅ Mark coupon as used ONLY if payment is successful
+            if (currentCoupon) {
+                markCouponAsUsed(currentCoupon.code);
+            }
+        } else if (data.status === 'failed') {
+            showToast('Payment failed. Please try again.', 'error');
+        } else {
+            showToast(`Error: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        document.body.classList.remove('loading');
+        showToast('Error checking payment status.', 'error');
+        console.error('Error checking payment status:', error);
+    });
+}
+
+function markCouponAsUsed(couponCode) {
+    fetch('/apply_coupon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coupon_code: couponCode })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Coupon marked as used');
+        } else {
+            console.error('Failed to mark coupon as used:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error marking coupon as used:', error);
+    });
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    });
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+        
+        if (modalId === 'topUpModal') {
+            const customAmount = document.getElementById('customAmount');
+            const couponInput = document.getElementById('couponCode');
+            const couponStatus = document.getElementById('couponStatus');
+            
+            if (customAmount) customAmount.value = '';
+            if (couponInput) couponInput.value = '';
+            if (couponStatus) {
+                couponStatus.textContent = '';
+                couponStatus.className = 'coupon-status';
+            }
+            
+            document.querySelectorAll('.amount-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            
+            currentCoupon = null;
+            currentAmount = 0;
+            updatePriceBreakdown(0);
+        }
+    }
+}
+
+
+function logout() {
+    fetch('/logout', {
+        method: 'GET',
+        credentials: 'same-origin'
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.href = '/login';
+        } else {
+            throw new Error('Logout failed');
+        }
+    })
+    .catch(error => {
+        console.error('Error during logout:', error);
+        showToast('Logout failed', 'error');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Existing amount options handling
+    document.querySelectorAll('.amount-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.amount-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            this.classList.add('selected');
+            currentAmount = parseFloat(this.dataset.amount);
+            
+            const customAmount = document.getElementById('customAmount');
+            if (customAmount) customAmount.value = '';
+            
+            updatePriceBreakdown(currentAmount, currentCoupon?.amount || 0);
+        });
+    });
+
+    // Existing custom amount input handling
+    const customAmountInput = document.getElementById('customAmount');
+    if (customAmountInput) {
+        customAmountInput.addEventListener('input', function() {
+            document.querySelectorAll('.amount-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            currentAmount = parseFloat(this.value) || 0;
+            updatePriceBreakdown(currentAmount, currentCoupon?.amount || 0);
+        });
+    }
+
+    // Initial fetch of user data
+    loadUserData();
+    
+    // Set up automatic refresh every 5 minutes (300000 milliseconds)
+    const refreshInterval = setInterval(() => {
+        loadUserData();
+    }, 300000);
+
+    // Optional: Clear interval when page is hidden to save resources
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            clearInterval(refreshInterval);
+        } else {
+            // Refresh immediately when page becomes visible again
+            loadUserData();
+            // Restart the interval
+            setInterval(() => {
+                loadUserData();
+            }, 300000);
+        }
+    });
+});
+
+// Function to load all user data
+function loadUserData() {
+    getUserInfo();
+    getApiKey();
+    updateBalance();
+    updateUsageStats();
+    loadRecentTasks();
+    loadTaskHistory();
+}
+
+// Function to fetch API key
+async function getApiKey() {
+    try {
+        const response = await fetch('/get_api_key', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        if (data.status === 'success' && data.api_key) {
+            const apiKeyElement = document.getElementById('apiKey');
+            if (apiKeyElement) {
+                apiKeyElement.textContent = data.api_key;
+            }
+        } else {
+            console.error('Failed to load API key:', data.message || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Error fetching API key:', error);
+    }
+}
+
+// Function to load recent tasks
+async function loadRecentTasks() {
+    try {
+        const apiKey = document.getElementById('apiKey').textContent.trim();
+        if (apiKey === 'Loading...') {
+            // If API key is not loaded yet, retry after a short delay
+            setTimeout(loadRecentTasks, 1000);
+            return;
+        }
+        
+        const response = await fetch('/get_recent_tasks', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                key: apiKey,
+                limit: 5  // Get only 5 most recent tasks
+            })
+        });
+        
+        const data = await response.json();
+        const container = document.getElementById('recent-tasks-container');
+        const noTasksElement = document.getElementById('no-recent-tasks');
+        
+        if (data.status === 'success' && data.tasks && data.tasks.length > 0) {
+            noTasksElement.style.display = 'none';
+            
+            // Create tasks list
+            const taskListHTML = data.tasks.map(task => {
+                const date = new Date(task.timestamp).toLocaleString();
+                const statusClass = `status-${task.status.toLowerCase()}`;
+                
+                return `
+                <div class="task-item">
+                    <div class="id">${task.id.substring(0, 8)}...</div>
+                    <div class="website">${task.type || 'Task'}</div>
+                    <div class="status ${statusClass}">${task.status}</div>
+                    <div class="result">${date}</div>
+                </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = `
+                <div class="task-list-header">
+                    <div>ID</div>
+                    <div>Type</div>
+                    <div>Status</div>
+                    <div class="result-column">Date</div>
+                </div>
+                ${taskListHTML}
+            `;
+        } else {
+            container.innerHTML = '';
+            noTasksElement.style.display = 'block';
+            noTasksElement.textContent = 'No recent tasks found';
+        }
+    } catch (error) {
+        console.error('Error loading recent tasks:', error);
+        const noTasksElement = document.getElementById('no-recent-tasks');
+        if (noTasksElement) {
+            noTasksElement.textContent = 'Error loading recent tasks';
+        }
+    }
+}
+
+// Function to fetch user info
+async function getUserInfo() {
+    try {
+        // Set a timeout to ensure we don't wait forever
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout')), 5000);
+        });
+        
+        const apiKey = document.getElementById('apiKey').textContent.trim();
+        
+        const fetchPromise = fetch('/get_user_info', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ key: apiKey }),
+        });
+        
+        // Race between the fetch and the timeout
+        const response = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+            const usernameElement = document.getElementById('username');
+            if (usernameElement && data.username) {
+                usernameElement.textContent = data.username;
+            } else {
+                await getUserInfoFallback();
+            }
+        } else {
+            await getUserInfoFallback();
+        }
+    } catch (error) {
+        console.error('Error fetching user info:', error);
+        await getUserInfoFallback();
+    }
+}
+
+async function getUserInfoFallback() {
+    try {
+        // Try to get the username from session info
+        const response = await fetch('/session_info', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        if (data.status === 'success' && data.username) {
+            const usernameElement = document.getElementById('username');
+            if (usernameElement) {
+                usernameElement.textContent = data.username;
+                return;
+            }
+        }
+        
+        // If we get here, both methods failed
+        setDefaultUsername();
+    } catch (error) {
+        console.error('Error in fallback method:', error);
+        setDefaultUsername();
+    }
+}
+
+function setDefaultUsername() {
+    const usernameElement = document.getElementById('username');
+    if (usernameElement) {
+        usernameElement.textContent = 'User';
+    }
+}
+
+// Function to fetch and update user balance
+async function updateBalance() {
+    try {
+        const apiKey = document.getElementById('apiKey').textContent.trim();
+        if (apiKey === 'Loading...') {
+            // If API key is not loaded yet, retry after a short delay
+            setTimeout(updateBalance, 1000);
+            return;
+        }
+        
+        const response = await fetch('/get_balance', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ key: apiKey }),
+        });
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+            const balanceElement = document.getElementById('currentBalance');
+            if (balanceElement) {
+                balanceElement.textContent = parseFloat(data.balance).toFixed(2);
+            }
+        } else {
+            console.error('Failed to load balance:', data.message || 'Unknown error');
+            const balanceElement = document.getElementById('currentBalance');
+            if (balanceElement) {
+                balanceElement.textContent = '0.00';
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching balance:', error);
+        const balanceElement = document.getElementById('currentBalance');
+        if (balanceElement) {
+            balanceElement.textContent = '0.00';
+        }
+    }
+}
+
+// Task history variables
+let currentPage = 1;
+let totalPages = 1;
+let currentTasks = [];
+
+function loadTaskHistory() {
+    const dateFilter = document.getElementById('date-filter').value;
+    const statusFilter = document.getElementById('status-filter').value;
+    const apiKey = document.getElementById('apiKey').textContent.trim();
+    
+    if (apiKey === 'Loading...') {
+        // If API key is not loaded yet, retry after a short delay
+        setTimeout(loadTaskHistory, 1000);
+        return;
+    }
+    
+    document.getElementById('task-table-body').innerHTML = '<tr><td colspan="5" class="loading-row">Loading tasks...</td></tr>';
+    
+    fetch('/get_task_history', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            key: apiKey,
+            date_filter: dateFilter,
+            status_filter: statusFilter,
+            page: currentPage
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            currentTasks = data.tasks || [];
+            totalPages = data.total_pages || 1;
+            
+            updateTaskTable();
+            updatePagination();
+        } else {
+            throw new Error(data.message || 'Failed to load task history');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading task history:', error);
+        document.getElementById('task-table-body').innerHTML = 
+            `<tr><td colspan="5" class="error-row">Error loading tasks: ${error.message}</td></tr>`;
+        
+        // Still update pagination but with default values
+        currentTasks = [];
+        totalPages = 1;
+        currentPage = 1;
+        updatePagination();
+    });
+}
+
+function updateTaskTable() {
+    const tableBody = document.getElementById('task-table-body');
+    const noTasksMessage = document.getElementById('no-tasks-message');
+    
+    if (currentTasks.length === 0) {
+        tableBody.innerHTML = '';
+        noTasksMessage.style.display = 'block';
+    } else {
+        noTasksMessage.style.display = 'none';
+        
+        tableBody.innerHTML = currentTasks.map(task => {
+            const date = new Date(task.timestamp).toLocaleString();
+            const statusClass = `status-${task.status.toLowerCase()}`;
+            
+            return `
+                <tr>
+                    <td>${date}</td>
+                    <td>${task.id}</td>
+                    <td>${task.type}</td>
+                    <td><span class="status-badge ${statusClass}">${task.status}</span></td>
+                    <td>
+                        <button class="details-btn" onclick="showTaskDetails('${task.id}')">
+                            View Details
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+}
+
+function updatePagination() {
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    const pageInfo = document.getElementById('page-info');
+    
+    prevBtn.disabled = currentPage <= 1;
+    nextBtn.disabled = currentPage >= totalPages;
+    
+    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+}
+
+function changePage(direction) {
+    const newPage = currentPage + direction;
+    
+    if (newPage >= 1 && newPage <= totalPages) {
+        currentPage = newPage;
+        loadTaskHistory();
+    }
+}
+
+function filterTasks() {
+    currentPage = 1;
+    loadTaskHistory();
+}
+
+function showTaskDetails(taskId) {
+    const task = currentTasks.find(t => t.id === taskId);
+    
+    if (!task) {
+        showToast('Task details not found', 'error');
+        return;
+    }
+    
+    // Create and show a modal with task details
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'taskDetailsModal';
+    modal.innerHTML = `
+        <div class="modal-content task-details">
+            <h2>Task Details</h2>
+            <div class="task-detail-row">
+                <span class="detail-label">ID:</span>
+                <span class="detail-value">${task.id}</span>
+            </div>
+            <div class="task-detail-row">
+                <span class="detail-label">Type:</span>
+                <span class="detail-value">${task.type}</span>
+            </div>
+            <div class="task-detail-row">
+                <span class="detail-label">Status:</span>
+                <span class="detail-value status-badge status-${task.status.toLowerCase()}">${task.status}</span>
+            </div>
+            <div class="task-detail-row">
+                <span class="detail-label">Date:</span>
+                <span class="detail-value">${new Date(task.timestamp).toLocaleString()}</span>
+            </div>
+            ${task.details ? `
+            <div class="task-detail-row">
+                <span class="detail-label">Details:</span>
+                <div class="detail-value task-details-text">${task.details}</div>
+            </div>
+            ` : ''}
+            <div class="modal-actions">
+                <button class="button-secondary" onclick="closeModal('taskDetailsModal')">Close</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+}
+</script>
+</body>
+</html>

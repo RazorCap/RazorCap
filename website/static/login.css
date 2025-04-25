@@ -1,0 +1,434 @@
+:root {
+    --black: #000000;
+    --dark-bg: #0a0a0a;
+    --purple-primary: #6b21a8;
+    --purple-secondary: #581c87;
+    --purple-accent: #7e22ce;
+    --purple-light: #a855f7;
+    --text-primary: #ffffff;
+    --text-secondary: #94a3b8;
+    --gradient-primary: linear-gradient(135deg, var(--purple-primary), var(--purple-secondary));
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background-color: var(--dark-bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+/* Background Effects */
+.page-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.gradient-sphere-global {
+    position: absolute;
+    top: 50%;
+    right: -20%;
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle at center, rgba(107, 33, 168, 0.2) 0%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(80px);
+    animation: float 10s infinite alternate;
+}
+
+.gradient-lines-global {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(107, 33, 168, 0.05) 10px,
+        rgba(107, 33, 168, 0.05) 20px
+    );
+}
+
+/* Navbar Styles */
+.navbar {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+}
+
+.nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logo-text {
+    font-size: 1.5rem;
+    font-weight: bold;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-decoration: none;
+}
+
+.logo-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--purple-light);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+/* Login Section */
+.login-section {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    padding-top: 80px;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 20px;
+    padding: 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.login-card h2 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--text-primary), var(--purple-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+.form-group input[type="password"],
+.form-group input[type="text"],
+.form-group input[type="username"] {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--purple-light);
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+}
+
+.password-input {
+    position: relative;
+}
+
+
+
+
+
+
+
+.logo-button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.logo-button:hover {
+    opacity: 0.8;
+}
+
+/* Keep your existing logo-text styles */
+.logo-text {
+    font-size: 1.5rem;
+    font-weight: bold;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+
+.toggle-password {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    color: var(--purple-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.toggle-password:hover {
+    opacity: 1;
+}
+
+.toggle-password:focus {
+    outline: 2px solid var(--purple-light);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.toggle-password svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.eye-icon {
+    width: 20px;
+    height: 20px;
+    position: relative;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+.eye-icon::before,
+.eye-icon::after {
+    content: '';
+    position: absolute;
+    transition: all 0.3s ease;
+}
+
+.eye-icon::before {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--purple-light);
+    border-radius: 75% 15%;
+    transform: rotate(45deg);
+    left: 0;
+    top: 0;
+}
+
+.eye-icon::after {
+    width: 6px;
+    height: 6px;
+    background: var(--purple-light);
+    border-radius: 50%;
+    left: 6px;
+    top: 5px;
+}
+
+/* Closed State */
+.eye-icon.closed::before {
+    height: 4px;
+    border-radius: 0;
+    transform: rotate(-45deg);
+    top: 8px;
+    left: 0;
+}
+
+.eye-icon.closed::after {
+    display: none;
+}
+.remember-forgot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Styling for the remember-me label and checkbox */
+.remember-me {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+/* Styling for the checkbox itself */
+.remember-me input[type="checkbox"] {
+    accent-color: var(--purple-light);
+    width: 18px; /* Adjust the size of the checkbox */
+    height: 18px; /* Adjust the size of the checkbox */
+    margin: 0; /* Removes default margin */
+}
+
+/* Optional: Styling for the 'Remember me' text */
+.remember-me span {
+    font-size: 14px; /* Adjust the text size */
+    color: var(--text-primary); /* Adjust text color */
+}
+
+/* Container for both 'Remember me' and 'Forgot password' sections */
+.remember-forgot {
+    display: flex;
+    justify-content: flex-start; /* Align left */
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Ensure that the checkbox inside remember-forgot is styled the same way */
+.remember-forgot input[type="checkbox"] {
+    accent-color: var(--purple-light);
+}
+
+
+.forgot-link {
+    color: var(--purple-light);
+    text-decoration: none;
+    transition: opacity 0.3s;
+}
+
+.forgot-link:hover {
+    opacity: 0.8;
+}
+
+.login-button {
+    width: 100%;
+    padding: 1rem;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-weight: 500;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s;
+}
+
+.login-button:hover {
+    transform: translateY(-2px);
+}
+
+.btn-shine {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        45deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+    );
+    transform: rotate(45deg);
+    animation: shine 3s infinite;
+}
+
+.signup-prompt {
+    text-align: center;
+    margin-top: 2rem;
+    color: var(--text-secondary);
+}
+
+.signup-prompt a {
+    color: var(--purple-light);
+    text-decoration: none;
+    transition: opacity 0.3s;
+}
+
+.signup-prompt a:hover {
+    opacity: 0.8;
+}
+
+/* Captcha Container */
+.captcha-container {
+    display: flex;
+    justify-content: center;
+    margin: 1.5rem 0;
+}
+
+.error-message {
+    color: #ef4444;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.1);
+    font-size: 0.875rem;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Animations */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+@keyframes shine {
+    0% { left: -50%; }
+    100% { left: 150%; }
+}
+
+@keyframes float {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-50px); }
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+    .login-card {
+        padding: 2rem;
+    }
+
+    .login-container {
+        padding: 1rem;
+    }
+}

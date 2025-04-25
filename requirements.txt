@@ -9,3 +9,4 @@ g4f
 pyjwt
 flask
 httpx
+bcrypt
