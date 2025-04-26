@@ -1,5 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash
-import sqlite3
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash, g
 import os
 import bcrypt
 import requests
@@ -11,6 +10,10 @@ from functools import wraps
 from solver import hcaptcha
 import threading
 from flask_wtf.csrf import CSRFProtect
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+import math
+from datetime import datetime
 
 app = Flask(__name__, 
     static_folder='website/static',
@@ -29,129 +32,218 @@ def timestamp_to_date(timestamp):
         return ""
     return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
 
-# Database setup
-DB_PATH = "razorcap.db"
+# MongoDB setup
+MONGO_URI = os.environ.get('MONGO_URI', 'your_mongo_uri')
+DB_NAME = 'razorcap'
+
+# Get MongoDB connection using Flask's application context
+def get_db():
+    """
+    Returns MongoDB database connection from the Flask g object.
+    Creates a new connection if none exists.
+    """
+    if 'mongo_client' not in g:
+        try:
+            g.mongo_client = MongoClient(
+                MONGO_URI,
+                serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
+                connectTimeoutMS=10000,         # 10 second timeout for initial connection
+                socketTimeoutMS=45000,          # 45 second timeout for operations
+                maxPoolSize=50,                 # Maximum connection pool size
+                retryWrites=True                # Retry write operations
+            )
+            # Test connection
+            g.mongo_client.server_info()
+            print(f"Connected to MongoDB at {MONGO_URI}")
+        except Exception as e:
+            print(f"Error connecting to MongoDB: {e}")
+            print("Falling back to alternative methods or exiting")
+            raise
+    
+    # Always return a fresh reference to the database
+    return g.mongo_client[DB_NAME]
+
+# Close MongoDB connection when the application context ends
+@app.teardown_appcontext
+def close_mongo_connection(error):
+    """Close MongoDB connection when the application context ends."""
+    mongo_client = g.pop('mongo_client', None)
+    if mongo_client is not None:
+        mongo_client.close()
+        print("MongoDB connection closed")
 
 def init_db():
-    # Initialize database
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    """Initialize database collections and indexes."""
+    # Get database connection
+    db = get_db()
     
-    # Create users table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        api_key TEXT UNIQUE,
-        created_at REAL,
-        last_login REAL,
-        is_admin INTEGER DEFAULT 0
-    )
-    ''')
+    # Initialize collections if they don't exist
+    if 'users' not in db.list_collection_names():
+        # Create users collection with unique index on username and api_key
+        db.users.create_index('username', unique=True)
+        db.users.create_index('api_key', unique=True)
+        # Add index for numeric_id for migration support
+        db.users.create_index('numeric_id')
     
-    # Create tasks table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS tasks (
-        task_id TEXT PRIMARY KEY,
-        api_key TEXT,
-        task_type TEXT,
-        sitekey TEXT,
-        siteurl TEXT,
-        proxy TEXT,
-        rqdata TEXT,
-        status TEXT,
-        solution TEXT,
-        error TEXT,
-        created_at REAL
-    )
-    ''')
+    if 'tasks' not in db.list_collection_names():
+        # Create tasks collection with unique index on task_id
+        db.tasks.create_index('task_id', unique=True)
+        # Add indexes for common queries
+        db.tasks.create_index('api_key')
+        db.tasks.create_index('status')
+        db.tasks.create_index([('created_at', -1)])  # Descending index for sorting
     
-    # Create balance table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS balance (
-        user_id INTEGER PRIMARY KEY,
-        amount REAL DEFAULT 0.0,
-        last_updated REAL,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    ''')
+    # Add indexes for other collections
+    db.balance.create_index('user_id')
+    db.transactions.create_index('user_id')
+    db.transactions.create_index([('created_at', -1)])
+    db.api_usage.create_index('api_key')
+    db.api_usage.create_index([('timestamp', -1)])
+    db.settings.create_index('key', unique=True)
     
-    # Create transactions table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        amount REAL,
-        type TEXT,
-        description TEXT,
-        created_at REAL,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    ''')
-    
-    # Create settings table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at REAL
-    )
-    ''')
-    
-    # Insert default settings if they don't exist
-    cursor.execute("SELECT * FROM settings WHERE key = 'basic_cost_per_1k'")
-    if not cursor.fetchone():
-        cursor.execute(
-            "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-            ('basic_cost_per_1k', '3.0', time.time())
-        )
-    
-    cursor.execute("SELECT * FROM settings WHERE key = 'enterprise_cost_per_1k'")
-    if not cursor.fetchone():
-        cursor.execute(
-            "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-            ('enterprise_cost_per_1k', '5.0', time.time())
-        )
-    
-    cursor.execute("SELECT * FROM settings WHERE key = 'min_balance'")
-    if not cursor.fetchone():
-        cursor.execute(
-            "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-            ('min_balance', '0.0', time.time())
-        )
-    
-    conn.commit()
-    conn.close()
+    # Check if default settings exist, create them if not
+    if db.settings.count_documents({}) == 0:
+        # Insert default settings
+        default_settings = [
+            {
+                'key': 'basic_cost_per_1k',
+                'value': '3.0',
+                'updated_at': time.time()
+            },
+            {
+                'key': 'enterprise_cost_per_1k',
+                'value': '5.0',
+                'updated_at': time.time()
+            },
+            {
+                'key': 'min_balance',
+                'value': '0.0',
+                'updated_at': time.time()
+            }
+        ]
+        db.settings.insert_many(default_settings)
 
-# Initialize the database
-init_db()
+# Initialize balance for users
+def ensure_user_balances():
+    """Ensure all users have balance records."""
+    # Get database connection
+    db = get_db()
+    
+    # Find all users
+    users = list(db.users.find())
+    
+    # Check if they have balance records, create if missing
+    for user in users:
+        balance = db.balance.find_one({'user_id': user['_id']})
+        if not balance:
+            db.balance.insert_one({
+                'user_id': user['_id'],
+                'amount': 0.0,
+                'last_updated': time.time()
+            })
+            print(f"Created balance record for user {user['username']}")
+
+# Add this migration function after init_db but before ensure_user_balances
+def migrate_numeric_ids():
+    """
+    Store the original numeric ID from SQLite in MongoDB documents to aid with transition.
+    This helps when user sessions still have the numeric IDs from SQLite.
+    """
+    # Get database connection
+    db = get_db()
+    
+    # Check if migration has been done
+    if db.settings.find_one({'key': 'migration_completed'}):
+        return
+    
+    users = list(db.users.find())
+    for i, user in enumerate(users, 1):
+        # Add a numeric_id field if not present
+        if 'numeric_id' not in user:
+            db.users.update_one(
+                {'_id': user['_id']},
+                {'$set': {'numeric_id': i}}
+            )
+            print(f"Added numeric_id {i} to user {user['username']}")
+    
+    # Mark migration as completed
+    db.settings.update_one(
+        {'key': 'migration_completed'},
+        {'$set': {'value': 'true', 'updated_at': time.time()}},
+        upsert=True
+    )
+    print("Numeric ID migration completed")
+
+# Initialize the database at application startup
+with app.app_context():
+    init_db()
+    migrate_numeric_ids()
+    ensure_user_balances()
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('login', next=request.url))
+        
+        # Validate that the user_id in session is valid
+        user_id = safe_object_id(session['user_id'])
+        if user_id is None:
+            session.clear()
+            return redirect(url_for('login', next=request.url))
+            
         return f(*args, **kwargs)
     return decorated_function
+
+# Utility functions
+def safe_object_id(id_str):
+    """Safely convert a string to ObjectId, returning None if invalid."""
+    try:
+        return ObjectId(id_str)
+    except:
+        return None
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # First check if user is logged in
         if 'user_id' not in session:
             return redirect(url_for('login', next=request.url))
         
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT is_admin FROM users WHERE id = ?", (session['user_id'],))
-        result = cursor.fetchone()
-        conn.close()
-        
-        if not result or not result[0]:
-            flash('Admin access required', 'error')
+        # Get the user from the database directly
+        try:
+            db = get_db()
+            user_id = safe_object_id(session['user_id'])
+            
+            if not user_id:
+                flash('Invalid user ID', 'error')
+                return redirect(url_for('dashboard'))
+                
+            user = db.users.find_one({'_id': user_id})
+            
+            if not user:
+                flash('User not found', 'error')
+                return redirect(url_for('dashboard'))
+                
+            # Ensure the is_admin is stored as integer 1 for admins, 0 for non-admins
+            is_admin_value = int(user.get('is_admin', 0))
+            
+            # Update session value for consistency
+            session['is_admin'] = is_admin_value
+            
+            # Check if is_admin is 1
+            if is_admin_value != 1:
+                flash('Admin access required', 'error')
+                return redirect(url_for('dashboard'))
+                
+            # If we get here, user is admin
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            print(f"Admin check error: {e}")
+            flash('Error checking admin status', 'error')
             return redirect(url_for('dashboard'))
-        
-        return f(*args, **kwargs)
+    
     return decorated_function
 
 @app.route('/')
@@ -161,39 +253,40 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        db = get_db()
         username = request.form.get('username')
         password = request.form.get('password')
         
         if not username or not password:
             return render_template('login.html', error_message='Username and password are required')
         
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, password, is_admin FROM users WHERE username = ?", (username,))
-        user = cursor.fetchone()
-        conn.close()
+        user = db.users.find_one({'username': username})
         
-        if not user or not bcrypt.checkpw(password.encode('utf-8'), user[1].encode('utf-8')):
+        if not user or not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             return render_template('login.html', error_message='Invalid username or password')
         
         # Update last login time
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (time.time(), user[0]))
-        conn.commit()
-        conn.close()
+        db.users.update_one(
+            {'_id': user['_id']},
+            {'$set': {'last_login': time.time()}}
+        )
         
-        session['user_id'] = user[0]
+        # Store user ID as string in session
+        session['user_id'] = str(user['_id'])
         session['username'] = username
-        session['is_admin'] = user[2]
+        
+        # Explicitly cast is_admin to int for consistent behavior
+        is_admin_value = int(bool(user.get('is_admin', 0)))
+        session['is_admin'] = is_admin_value
         
         return redirect(url_for('dashboard'))
     
     return render_template('login.html')
-
+    
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
+        db = get_db()
         username = request.form.get('username')
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
@@ -206,13 +299,9 @@ def register():
             return render_template('register.html', error_message='Passwords do not match')
         
         # Check if username already exists
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-        existing_user = cursor.fetchone()
+        existing_user = db.users.find_one({'username': username})
         
         if existing_user:
-            conn.close()
             return render_template('register.html', error_message='Username already exists')
         
         # Generate API key as UUID (GUID)
@@ -221,36 +310,37 @@ def register():
         # Hash password
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         
-        # Set admin status if username is 'admin'
+        # Set admin status if username is 'admin' - ensure it's an integer
         is_admin = 1 if username.lower() == 'admin' else 0
         
         # Insert user into database
         try:
-            cursor.execute(
-                "INSERT INTO users (username, password, api_key, created_at, last_login, is_admin) VALUES (?, ?, ?, ?, ?, ?)",
-                (username, hashed_password.decode('utf-8'), api_key, time.time(), time.time(), is_admin)
-            )
-            user_id = cursor.lastrowid
+            result = db.users.insert_one({
+                'username': username,
+                'password': hashed_password.decode('utf-8'),
+                'api_key': api_key,
+                'created_at': time.time(),
+                'last_login': time.time(),
+                'is_admin': is_admin  # Explicitly an integer
+            })
             
-            # Initialize balance for new user
-            cursor.execute(
-                "INSERT INTO balance (user_id, amount, last_updated) VALUES (?, ?, ?)",
-                (user_id, 0.0, time.time())  # Start with 0.0 credits instead of 10.0
-            )
+            # Initialize balance for the user
+            db.balance.insert_one({
+                'user_id': result.inserted_id,
+                'amount': 0.0,
+                'last_updated': time.time()
+            })
             
-            # No initial balance transaction needed since balance is 0
+            # Get the new user
+            new_user = db.users.find_one({'_id': result.inserted_id})
             
-            conn.commit()
-            conn.close()
-            
-            # Set session
-            session['user_id'] = user_id
+            # Store user ID as string in session
+            session['user_id'] = str(new_user['_id'])
             session['username'] = username
-            session['is_admin'] = is_admin
+            session['is_admin'] = is_admin  # Use the same integer value
             
             return redirect(url_for('dashboard'))
         except Exception as e:
-            conn.close()
             return render_template('register.html', error_message=f'Registration failed: {str(e)}')
     
     return render_template('register.html')
@@ -263,44 +353,40 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Get user details
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT username, api_key, is_admin FROM users WHERE id = ?", (session['user_id'],))
-    user = cursor.fetchone()
+    db = get_db()
+    
+    # Get user details safely
+    user_id = safe_object_id(session['user_id'])
+    if user_id is None:
+        # If user_id cannot be converted, clear session and redirect
+        session.clear()
+        return redirect(url_for('login'))
+    
+    user = db.users.find_one({'_id': user_id})
     
     # If user is not found, clear session and redirect to login
     if not user:
         session.clear()
-        conn.close()
         return redirect(url_for('login'))
     
+    # Refresh is_admin value in session with consistent type conversion
+    session['is_admin'] = int(bool(user.get('is_admin', 0)))
+    
     # Get user balance
-    cursor.execute("SELECT amount FROM balance WHERE user_id = ?", (session['user_id'],))
-    balance_result = cursor.fetchone()
-    balance = balance_result[0] if balance_result else 0.0
+    balance_result = db.balance.find_one({'user_id': user['_id']})
+    balance = balance_result['amount'] if balance_result else 0.0
     
     # Get recent transactions
-    cursor.execute(
-        "SELECT amount, type, description, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 5",
-        (session['user_id'],)
-    )
-    transactions = cursor.fetchall()
+    transactions = list(db.transactions.find({'user_id': user['_id']}).sort('created_at', -1).limit(5))
     
     # Get recent tasks
-    cursor.execute(
-        "SELECT task_id, task_type, status, created_at FROM tasks WHERE api_key = ? ORDER BY created_at DESC LIMIT 5",
-        (user[1],)
-    )
-    tasks = cursor.fetchall()
-    
-    conn.close()
+    tasks = list(db.tasks.find({'api_key': user['api_key']}).sort('created_at', -1).limit(5))
     
     return render_template(
         'dashboard.html', 
-        username=user[0], 
-        api_key=user[1], 
-        is_admin=user[2],
+        username=user['username'], 
+        api_key=user['api_key'], 
+        is_admin=session['is_admin'],  # Use the session value for consistency
         balance=balance,
         transactions=transactions,
         tasks=tasks
@@ -309,148 +395,326 @@ def dashboard():
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
-    # Get all users
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username, created_at, last_login, is_admin FROM users")
-    users = cursor.fetchall()
-    
-    # Get system settings
-    cursor.execute("SELECT key, value FROM settings")
-    settings = cursor.fetchall()
-    
-    # Get recent transactions
-    cursor.execute(
-        "SELECT t.id, u.username, t.amount, t.type, t.description, t.created_at FROM transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 10"
-    )
-    transactions = cursor.fetchall()
-    
-    # Get recent tasks
-    cursor.execute(
-        "SELECT t.task_id, u.username, t.task_type, t.status, t.created_at FROM tasks t JOIN users u ON t.api_key = u.api_key ORDER BY t.created_at DESC LIMIT 10"
-    )
-    tasks = cursor.fetchall()
-    
-    conn.close()
-    
-    return render_template(
-        'admin.html',
-        users=users,
-        settings=settings,
-        transactions=transactions,
-        tasks=tasks
-    )
+    try:
+        db = get_db()
+        
+        # Get all users
+        users = list(db.users.find(
+            {}, 
+            {'_id': 1, 'username': 1, 'created_at': 1, 'last_login': 1, 'is_admin': 1}
+        ).sort('created_at', -1))
+        
+        # Format users as lists for template
+        formatted_users = []
+        for user in users:
+            formatted_users.append([
+                str(user['_id']),
+                user['username'],
+                user.get('created_at', 0),
+                user.get('last_login', 0),
+                bool(user.get('is_admin', 0))
+            ])
+        
+        # Get and format system settings as a list of lists for the template
+        settings_data = db.settings.find({}, {'_id': 0, 'key': 1, 'value': 1})
+        formatted_settings = [[s['key'], s['value']] for s in settings_data]
+        
+        # Get recent transactions with user info
+        pipeline = [
+            {'$lookup': {
+                'from': 'users',
+                'localField': 'user_id',
+                'foreignField': '_id',
+                'as': 'user'
+            }},
+            {'$unwind': '$user'},
+            {'$sort': {'created_at': -1}},
+            {'$limit': 10},
+            {'$project': {
+                '_id': 1,
+                'username': '$user.username',
+                'amount': 1,
+                'type': 1,
+                'description': 1,
+                'created_at': 1
+            }}
+        ]
+        transactions_data = list(db.transactions.aggregate(pipeline))
+        
+        # Format transactions as lists for template
+        formatted_transactions = []
+        for transaction in transactions_data:
+            formatted_transactions.append([
+                str(transaction['_id']),
+                transaction['username'],
+                transaction['amount'],
+                transaction['type'],
+                transaction['description'],
+                transaction['created_at']
+            ])
+        
+        # Get recent tasks with user info
+        task_pipeline = [
+            {'$lookup': {
+                'from': 'users',
+                'localField': 'api_key',
+                'foreignField': 'api_key',
+                'as': 'user'
+            }},
+            {'$unwind': '$user'},
+            {'$sort': {'created_at': -1}},
+            {'$limit': 10},
+            {'$project': {
+                'task_id': 1,
+                'username': '$user.username',
+                'task_type': 1,
+                'status': 1,
+                'created_at': 1
+            }}
+        ]
+        tasks_data = list(db.tasks.aggregate(task_pipeline))
+        
+        # Format tasks as lists for template
+        formatted_tasks = []
+        for task in tasks_data:
+            formatted_tasks.append([
+                task['task_id'],
+                task['username'],
+                task['task_type'],
+                task['status'],
+                task['created_at']
+            ])
+        
+        return render_template(
+            'admin.html',
+            users=formatted_users,
+            settings=formatted_settings,
+            transactions=formatted_transactions,
+            tasks=formatted_tasks
+        )
+    except Exception as e:
+        print(f"Admin dashboard error: {e}")
+        flash(f"Error loading admin dashboard: {str(e)}", 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/admin/users')
 @admin_required
-def admin_users():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username, created_at, last_login, is_admin FROM users")
-    users = cursor.fetchall()
-    
-    # Get balance for each user
-    user_balances = {}
-    for user in users:
-        cursor.execute("SELECT amount FROM balance WHERE user_id = ?", (user[0],))
-        balance_result = cursor.fetchone()
-        user_balances[user[0]] = balance_result[0] if balance_result else 0.0
-    
-    conn.close()
-    
-    return render_template('admin_users.html', users=users, user_balances=user_balances)
+def users_management():
+    try:
+        db = get_db()
+        # Get all users with pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        skip = (page - 1) * per_page
+        
+        # Use aggregation for more efficient user data retrieval with projection
+        users_pipeline = [
+            {"$sort": {"created_at": -1}},
+            {"$skip": skip},
+            {"$limit": per_page},
+            {"$project": {
+                "_id": 1,
+                "username": 1,
+                "email": 1,
+                "created_at": 1,
+                "is_admin": {"$ifNull": ["$is_admin", False]},
+                "is_active": {"$ifNull": ["$is_active", True]},
+                "api_key": 1
+            }}
+        ]
+        
+        users = list(db.users.aggregate(users_pipeline))
+        
+        # Get total count for pagination
+        total_users = db.users.count_documents({})
+        total_pages = math.ceil(total_users / per_page)
+        
+        # Get balance for each user and add to user object
+        for user in users:
+            balance = db.balance.find_one({"user_id": user["_id"]})
+            user["balance"] = balance.get("amount", 0) if balance else 0
+            
+            # Convert ObjectId to string for JSON serialization
+            user["_id"] = str(user["_id"])
+            
+            # Format timestamps
+            if "created_at" in user:
+                user["created_at_formatted"] = datetime.fromtimestamp(user["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+        
+        return render_template('admin/users.html', 
+                              users=users, 
+                              page=page, 
+                              total_pages=total_pages)
+    except Exception as e:
+        print(f"Error in users management: {e}")
+        flash(f"An error occurred: {str(e)}", "danger")
+        return render_template('admin/users.html', users=[], page=1, total_pages=1)
+
+@app.route('/admin/user/<user_id>', methods=['GET', 'POST'])
+@admin_required
+def user_details(user_id):
+    try:
+        db = get_db()
+        # Convert string user_id to ObjectId
+        user_id_obj = safe_object_id(user_id)
+        if not user_id_obj:
+            flash("Invalid user ID format", "danger")
+            return redirect(url_for('users_management'))
+        
+        # Find user by ID
+        user = db.users.find_one({"_id": user_id_obj})
+        if not user:
+            flash("User not found", "danger")
+            return redirect(url_for('users_management'))
+        
+        if request.method == 'POST':
+            # Update user fields from form
+            update_data = {
+                "username": request.form.get('username'),
+                "email": request.form.get('email'),
+                "is_active": bool(request.form.get('is_active')),
+                "is_admin": bool(request.form.get('is_admin'))
+            }
+            
+            # Update balance if provided
+            new_balance = request.form.get('balance')
+            if new_balance is not None and new_balance.strip():
+                try:
+                    new_balance_float = float(new_balance)
+                    
+                    # Use upsert to create balance document if it doesn't exist
+                    db.balance.update_one(
+                        {"user_id": user_id_obj},
+                        {"$set": {"amount": new_balance_float}},
+                        upsert=True
+                    )
+                except ValueError:
+                    flash("Invalid balance value", "danger")
+            
+            # Update user document
+            result = db.users.update_one(
+                {"_id": user_id_obj},
+                {"$set": update_data}
+            )
+            
+            if result.modified_count > 0:
+                flash("User updated successfully", "success")
+            else:
+                flash("No changes were made", "info")
+                
+            return redirect(url_for('user_details', user_id=user_id))
+        
+        # Get user balance
+        balance = db.balance.find_one({"user_id": user_id_obj})
+        balance_amount = balance.get("amount", 0) if balance else 0
+        
+        # Get recent transactions for this user with aggregation
+        transactions_pipeline = [
+            {"$match": {"user_id": user_id_obj}},
+            {"$sort": {"created_at": -1}},
+            {"$limit": 10},
+            {"$project": {
+                "amount": 1,
+                "type": 1,
+                "description": 1,
+                "created_at": 1
+            }}
+        ]
+        
+        transactions = list(db.transactions.aggregate(transactions_pipeline))
+        
+        # Format transactions for display
+        for transaction in transactions:
+            transaction["created_at_formatted"] = datetime.fromtimestamp(transaction["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            
+        return render_template('admin/user_details.html', 
+                              user=user, 
+                              balance=balance_amount,
+                              transactions=transactions)
+    except Exception as e:
+        print(f"Error in user details: {e}")
+        flash(f"An error occurred: {str(e)}", "danger")
+        return redirect(url_for('users_management'))
 
 @app.route('/admin/add_balance', methods=['POST'])
 @admin_required
 def admin_add_balance():
+    db = get_db()
     user_id = request.form.get('user_id')
     amount = float(request.form.get('amount', 0))
     description = request.form.get('description', 'Admin credit')
     
     if not user_id or amount <= 0:
         flash('Invalid input', 'error')
-        return redirect(url_for('admin_users'))
-    
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+        return redirect(url_for('users_management'))
     
     # Get current balance
-    cursor.execute("SELECT amount FROM balance WHERE user_id = ?", (user_id,))
-    balance_result = cursor.fetchone()
+    balance_result = db.balance.find_one({'user_id': ObjectId(user_id)})
     
     if not balance_result:
         # Create balance record if it doesn't exist
-        cursor.execute(
-            "INSERT INTO balance (user_id, amount, last_updated) VALUES (?, ?, ?)",
-            (user_id, amount, time.time())
-        )
+        db.balance.insert_one({'user_id': ObjectId(user_id), 'amount': amount, 'last_updated': time.time()})
         new_balance = amount
     else:
         # Update existing balance
-        new_balance = balance_result[0] + amount
-        cursor.execute(
-            "UPDATE balance SET amount = ?, last_updated = ? WHERE user_id = ?",
-            (new_balance, time.time(), user_id)
+        new_balance = balance_result['amount'] + amount
+        db.balance.update_one(
+            {'_id': balance_result['_id']},
+            {'$set': {'amount': new_balance, 'last_updated': time.time()}}
         )
     
     # Add transaction record
-    cursor.execute(
-        "INSERT INTO transactions (user_id, amount, type, description, created_at) VALUES (?, ?, ?, ?, ?)",
-        (user_id, amount, 'credit', description, time.time())
-    )
-    
-    conn.commit()
-    conn.close()
+    db.transactions.insert_one({
+        'user_id': ObjectId(user_id),
+        'amount': amount,
+        'type': 'credit',
+        'description': description,
+        'created_at': time.time()
+    })
     
     flash(f'Added {amount} credits to user {user_id}', 'success')
-    return redirect(url_for('admin_users'))
+    return redirect(url_for('users_management'))
 
 @app.route('/admin/settings', methods=['GET', 'POST'])
 @admin_required
 def admin_settings():
+    db = get_db()
     if request.method == 'POST':
         basic_cost = float(request.form.get('basic_cost_per_1k', 3.0))
         enterprise_cost = float(request.form.get('enterprise_cost_per_1k', 5.0))
         min_balance = float(request.form.get('min_balance', 0.0))
         
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "UPDATE settings SET value = ?, updated_at = ? WHERE key = ?",
-            (str(basic_cost), time.time(), 'basic_cost_per_1k')
+        # Update settings
+        db.settings.update_one(
+            {'key': 'basic_cost_per_1k'},
+            {'$set': {'value': str(basic_cost), 'updated_at': time.time()}}
         )
         
-        cursor.execute(
-            "UPDATE settings SET value = ?, updated_at = ? WHERE key = ?",
-            (str(enterprise_cost), time.time(), 'enterprise_cost_per_1k')
+        db.settings.update_one(
+            {'key': 'enterprise_cost_per_1k'},
+            {'$set': {'value': str(enterprise_cost), 'updated_at': time.time()}}
         )
         
-        cursor.execute(
-            "UPDATE settings SET value = ?, updated_at = ? WHERE key = ?",
-            (str(min_balance), time.time(), 'min_balance')
+        db.settings.update_one(
+            {'key': 'min_balance'},
+            {'$set': {'value': str(min_balance), 'updated_at': time.time()}}
         )
-        
-        conn.commit()
-        conn.close()
         
         flash('Settings updated successfully', 'success')
         return redirect(url_for('admin_settings'))
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT key, value FROM settings")
-    settings = cursor.fetchall()
-    conn.close()
+    # Get settings
+    settings = {}
+    for setting in db.settings.find():
+        settings[setting['key']] = setting['value']
     
-    settings_dict = {key: value for key, value in settings}
-    
-    return render_template('admin_settings.html', settings=settings_dict)
+    return render_template('admin_settings.html', settings=settings)
 
 # Dashboard API endpoints
 @app.route('/get_user_info', methods=['POST'])
 @csrf.exempt
 def get_user_info():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -458,18 +722,14 @@ def get_user_info():
     api_key = data['key']
     
     # Get user details based on API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT username FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
-    conn.close()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
     return jsonify({
         'status': 'success',
-        'username': user[0]
+        'username': user['username']
     })
 
 @app.route('/session_info', methods=['GET'])
@@ -486,24 +746,23 @@ def session_info():
 @login_required
 @csrf.exempt
 def get_api_key():
+    db = get_db()
     # Get user's API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT api_key FROM users WHERE id = ?", (session['user_id'],))
-    result = cursor.fetchone()
-    conn.close()
+    user_id = safe_object_id(session['user_id'])
+    user = db.users.find_one({'_id': user_id})
     
-    if not result:
+    if not user:
         return jsonify({'status': 'error', 'message': 'User not found'})
     
     return jsonify({
         'status': 'success',
-        'api_key': result[0]
+        'api_key': user['api_key']
     })
 
 @app.route('/get_balance', methods=['POST'])
 @csrf.exempt
 def get_balance():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -511,33 +770,24 @@ def get_balance():
     api_key = data['key']
     
     # Get user ID from API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
-        conn.close()
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
-    user_id = user[0]
+    # Get balance from balance collection
+    balance_doc = db.balance.find_one({'user_id': user['_id']})
     
-    # Get balance from balance table
-    cursor.execute("SELECT amount FROM balance WHERE user_id = ?", (user_id,))
-    balance_result = cursor.fetchone()
-    
-    if not balance_result:
+    if not balance_doc:
         # If no balance record exists, create one with default value
-        cursor.execute(
-            "INSERT INTO balance (user_id, amount, last_updated) VALUES (?, ?, ?)",
-            (user_id, 0.0, time.time())
-        )
-        conn.commit()
         balance = 0.0
+        db.balance.insert_one({
+            'user_id': user['_id'], 
+            'amount': balance,
+            'last_updated': time.time()
+        })
     else:
-        balance = balance_result[0]
-    
-    conn.close()
+        balance = balance_doc['amount']
     
     return jsonify({
         'status': 'success',
@@ -547,6 +797,7 @@ def get_balance():
 @app.route('/get_daily_usage', methods=['POST'])
 @csrf.exempt
 def get_daily_usage():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -554,28 +805,19 @@ def get_daily_usage():
     api_key = data['key']
     
     # Verify API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
-        conn.close()
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
-    user_id = user[0]
-    
-    # Get daily usage from tasks table
+    # Get daily usage from tasks collection
     current_time = time.time()
     day_ago = current_time - 24*3600
     
-    cursor.execute(
-        "SELECT COUNT(*) FROM tasks WHERE api_key = ? AND created_at >= ?",
-        (api_key, day_ago)
-    )
-    daily_requests = cursor.fetchone()[0]
-    
-    conn.close()
+    daily_requests = db.api_usage.count_documents({
+        'api_key': api_key,
+        'timestamp': {'$gte': day_ago}
+    })
     
     return jsonify({
         'status': 'success',
@@ -585,6 +827,7 @@ def get_daily_usage():
 @app.route('/get_success_rate', methods=['POST'])
 @csrf.exempt
 def get_success_rate():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -592,29 +835,21 @@ def get_success_rate():
     api_key = data['key']
     
     # Verify API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
-        conn.close()
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
-    # Get success rate from tasks table
-    cursor.execute(
-        "SELECT COUNT(*) FROM tasks WHERE api_key = ? AND status = 'solved'",
-        (api_key,)
-    )
-    solved_count = cursor.fetchone()[0]
+    # Get success rate from tasks collection
+    solved_count = db.tasks.count_documents({
+        'api_key': api_key,
+        'status': 'solved'
+    })
     
-    cursor.execute(
-        "SELECT COUNT(*) FROM tasks WHERE api_key = ? AND status IN ('solved', 'error')",
-        (api_key,)
-    )
-    total_count = cursor.fetchone()[0]
-    
-    conn.close()
+    total_count = db.tasks.count_documents({
+        'api_key': api_key,
+        'status': {'$in': ['solved', 'error']}
+    })
     
     # Calculate success rate
     success_rate = 0
@@ -629,6 +864,7 @@ def get_success_rate():
 @app.route('/get_recent_tasks', methods=['POST'])
 @csrf.exempt
 def get_recent_tasks():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -637,32 +873,25 @@ def get_recent_tasks():
     limit = data.get('limit', 5)  # Default to 5 recent tasks
     
     # Verify API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
-        conn.close()
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
     # Get recent tasks from database
-    cursor.execute(
-        "SELECT task_id, task_type, status, created_at FROM tasks WHERE api_key = ? ORDER BY created_at DESC LIMIT ?",
-        (api_key, limit)
-    )
-    tasks = cursor.fetchall()
-    conn.close()
+    tasks = list(db.tasks.find(
+        {'api_key': api_key},
+        {'_id': 0, 'task_id': 1, 'task_type': 1, 'status': 1, 'created_at': 1}
+    ).sort('created_at', -1).limit(limit))
     
     # Format tasks for response
     formatted_tasks = []
     for task in tasks:
-        task_id, task_type, status, timestamp = task
         formatted_tasks.append({
-            'id': task_id,
-            'type': task_type,
-            'status': status,
-            'timestamp': timestamp
+            'id': task['task_id'],
+            'type': task['task_type'],
+            'status': task['status'],
+            'timestamp': task['created_at']
         })
     
     return jsonify({
@@ -673,6 +902,7 @@ def get_recent_tasks():
 @app.route('/get_task_history', methods=['POST'])
 @csrf.exempt
 def get_task_history():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -683,44 +913,34 @@ def get_task_history():
     status_filter = data.get('status_filter', 'all')
     
     # Verify API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
-        conn.close()
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
     # Build query based on filters
-    query = "SELECT task_id, task_type, status, created_at FROM tasks WHERE api_key = ?"
-    params = [api_key]
+    query = {'api_key': api_key}
     
     # Apply date filter
     current_time = time.time()
     if date_filter == 'today':
-        query += " AND created_at >= ?"
-        params.append(current_time - 24*3600)  # Last 24 hours
+        query['created_at'] = {'$gte': current_time - 24*3600}  # Last 24 hours
     elif date_filter == 'yesterday':
-        query += " AND created_at >= ? AND created_at < ?"
-        params.append(current_time - 48*3600)  # 24-48 hours ago
-        params.append(current_time - 24*3600)
+        query['created_at'] = {
+            '$gte': current_time - 48*3600,  # 24-48 hours ago
+            '$lt': current_time - 24*3600
+        }
     elif date_filter == 'week':
-        query += " AND created_at >= ?"
-        params.append(current_time - 7*24*3600)  # Last 7 days
+        query['created_at'] = {'$gte': current_time - 7*24*3600}  # Last 7 days
     elif date_filter == 'month':
-        query += " AND created_at >= ?"
-        params.append(current_time - 30*24*3600)  # Last 30 days
+        query['created_at'] = {'$gte': current_time - 30*24*3600}  # Last 30 days
     
     # Apply status filter
     if status_filter != 'all':
-        query += " AND status = ?"
-        params.append(status_filter)
+        query['status'] = status_filter
     
     # Get total count for pagination
-    count_query = query.replace("SELECT task_id, task_type, status, created_at", "SELECT COUNT(*)")
-    cursor.execute(count_query, params)
-    total_tasks = cursor.fetchone()[0]
+    total_tasks = db.tasks.count_documents(query)
     
     # Apply pagination
     per_page = 10
@@ -729,25 +949,23 @@ def get_task_history():
     if page < 1 or page > total_pages:
         page = 1
     
-    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-    params.append(per_page)
-    params.append((page - 1) * per_page)
+    skip = (page - 1) * per_page
     
     # Get paginated tasks
-    cursor.execute(query, params)
-    tasks = cursor.fetchall()
-    conn.close()
+    tasks = list(db.tasks.find(
+        query,
+        {'_id': 0, 'task_id': 1, 'task_type': 1, 'status': 1, 'created_at': 1}
+    ).sort('created_at', -1).skip(skip).limit(per_page))
     
     # Format tasks for response
     formatted_tasks = []
     for task in tasks:
-        task_id, task_type, status, timestamp = task
         formatted_tasks.append({
-            'id': task_id,
-            'type': task_type,
-            'status': status,
-            'timestamp': timestamp,
-            'details': f"Task details for {task_id}"
+            'id': task['task_id'],
+            'type': task['task_type'],
+            'status': task['status'],
+            'timestamp': task['created_at'],
+            'details': f"Task details for {task['task_id']}"
         })
     
     return jsonify({
@@ -761,6 +979,7 @@ def get_task_history():
 @login_required
 @csrf.exempt
 def reset_key():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'Current API key is required'})
@@ -769,11 +988,12 @@ def reset_key():
     new_key = str(uuid.uuid4())
     
     # Update the API key in the database
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET api_key = ? WHERE id = ?", (new_key, session['user_id']))
-    conn.commit()
-    conn.close()
+    user_id = safe_object_id(session['user_id'])
+    if user_id:
+        db.users.update_one(
+            {'_id': user_id}, 
+            {'$set': {'api_key': new_key}}
+        )
     
     return jsonify({
         'status': 'success',
@@ -783,6 +1003,7 @@ def reset_key():
 @app.route('/get_transactions', methods=['POST'])
 @csrf.exempt
 def get_transactions():
+    db = get_db()
     data = request.json
     if not data or 'key' not in data:
         return jsonify({'status': 'error', 'message': 'API key is required'})
@@ -791,34 +1012,25 @@ def get_transactions():
     limit = data.get('limit', 10)  # Default to 10 transactions
     
     # Verify API key
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-    user = cursor.fetchone()
+    user = db.users.find_one({'api_key': api_key})
     
     if not user:
-        conn.close()
         return jsonify({'status': 'error', 'message': 'Invalid API key'})
     
-    user_id = user[0]
-    
     # Get transactions from database
-    cursor.execute(
-        "SELECT amount, type, description, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
-        (user_id, limit)
-    )
-    transactions = cursor.fetchall()
-    conn.close()
+    transactions = list(db.transactions.find(
+        {'user_id': user['_id']},
+        {'_id': 0, 'amount': 1, 'type': 1, 'description': 1, 'created_at': 1}
+    ).sort('created_at', -1).limit(limit))
     
     # Format transactions for response
     formatted_transactions = []
     for transaction in transactions:
-        amount, type, description, timestamp = transaction
         formatted_transactions.append({
-            'amount': amount,
-            'type': type,
-            'description': description,
-            'timestamp': timestamp
+            'amount': transaction['amount'],
+            'type': transaction['type'],
+            'description': transaction['description'],
+            'timestamp': transaction['created_at']
         })
     
     return jsonify({
@@ -829,13 +1041,10 @@ def get_transactions():
 # API Key Validation Functions
 def validate_api_key(api_key):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE api_key = ?", (api_key,))
-        result = cursor.fetchone()
-        conn.close()
+        db = get_db()
+        user = db.users.find_one({'api_key': api_key})
         
-        if not result:
+        if not user:
             return False, "Invalid API key"
         
         return True, "Valid API key"
@@ -844,15 +1053,11 @@ def validate_api_key(api_key):
 
 def get_task_cost(task_type='hcaptcha_basic'):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
+        db = get_db()
         cost_key = 'basic_cost_per_1k' if task_type == 'hcaptcha_basic' else 'enterprise_cost_per_1k'
-        cursor.execute("SELECT value FROM settings WHERE key = ?", (cost_key,))
-        result = cursor.fetchone()
-        conn.close()
+        setting = db.settings.find_one({'key': cost_key})
         
-        if not result:
+        if not setting:
             # Default costs
             default_costs = {
                 'hcaptcha_basic': 3.0,
@@ -861,7 +1066,7 @@ def get_task_cost(task_type='hcaptcha_basic'):
             return default_costs.get(task_type, 3.0) / 1000  # Cost per single solve
         
         # Convert from cost per 1k to cost per single solve
-        return float(result[0]) / 1000
+        return float(setting['value']) / 1000
     except Exception as e:
         print(f"Error getting task cost: {e}")
         # Default costs per single solve
@@ -873,39 +1078,29 @@ def get_task_cost(task_type='hcaptcha_basic'):
 
 def increment_api_key_usage(api_key, task_type='hcaptcha_basic'):
     try:
-        # Connect to database
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Check if usage tracking table exists, create it if not
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS api_usage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            api_key TEXT,
-            timestamp REAL,
-            task_type TEXT,
-            FOREIGN KEY (api_key) REFERENCES users(api_key)
-        )
-        ''')
-        
-        # Insert usage record
-        cursor.execute(
-            "INSERT INTO api_usage (api_key, timestamp, task_type) VALUES (?, ?, ?)",
-            (api_key, time.time(), task_type)
-        )
+        db = get_db()
+        # Insert usage record in MongoDB with error handling
+        try:
+            db.api_usage.insert_one({
+                'api_key': api_key,
+                'timestamp': time.time(),
+                'task_type': task_type
+            })
+        except Exception as e:
+            print(f"Error recording API usage: {e}")
+            # Continue anyway, don't fail the task
         
         # Get daily usage count for metrics
         day_ago = time.time() - 24*3600
-        cursor.execute(
-            "SELECT COUNT(*) FROM api_usage WHERE api_key = ? AND timestamp >= ?",
-            (api_key, day_ago)
-        )
-        daily_count = cursor.fetchone()[0]
-        
-        conn.commit()
-        conn.close()
-        
-        return True
+        try:
+            daily_count = db.api_usage.count_documents({
+                'api_key': api_key,
+                'timestamp': {'$gte': day_ago}
+            })
+            return True
+        except Exception as e:
+            print(f"Error counting daily usage: {e}")
+            return False
     except Exception as e:
         print(f"Error incrementing API key usage: {e}")
         return False
@@ -939,72 +1134,59 @@ class Solver:
     
     def create_task(self, task_type, sitekey, siteurl, proxy=None, rqdata=None):
         try:
+            db = get_db()
             # Validate API key
             valid, message = validate_api_key(self.api_key)
             if not valid:
                 return False, message
             
-            # Check if user has enough balance
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            
-            # Get user ID from API key
-            cursor.execute("SELECT id FROM users WHERE api_key = ?", (self.api_key,))
-            user = cursor.fetchone()
+            # Get user from API key
+            user = db.users.find_one({'api_key': self.api_key})
             
             if not user:
-                conn.close()
                 return False, "Invalid API key"
             
-            user_id = user[0]
-            
             # Get user's balance
-            cursor.execute("SELECT amount FROM balance WHERE user_id = ?", (user_id,))
-            balance_result = cursor.fetchone()
+            balance_doc = db.balance.find_one({'user_id': user['_id']})
             
             # Get task cost from settings based on task type
             task_cost = get_task_cost(task_type)
             
-            if not balance_result or balance_result[0] < task_cost:
-                conn.close()
+            if not balance_doc or balance_doc['amount'] < task_cost:
                 return False, "Insufficient balance"
             
             # Deduct balance
-            new_balance = balance_result[0] - task_cost
+            new_balance = balance_doc['amount'] - task_cost
             
-            cursor.execute(
-                "UPDATE balance SET amount = ?, last_updated = ? WHERE user_id = ?",
-                (new_balance, time.time(), user_id)
+            db.balance.update_one(
+                {'user_id': user['_id']},
+                {'$set': {'amount': new_balance, 'last_updated': time.time()}}
             )
             
             # Add transaction record
-            cursor.execute(
-                "INSERT INTO transactions (user_id, amount, type, description, created_at) VALUES (?, ?, ?, ?, ?)",
-                (user_id, -task_cost, 'debit', f'Task: {task_type}', time.time())
-            )
+            db.transactions.insert_one({
+                'user_id': user['_id'],
+                'amount': -task_cost,
+                'type': 'debit',
+                'description': f'Task: {task_type}',
+                'created_at': time.time()
+            })
             
             # Generate a unique task ID
             task_id = str(uuid.uuid4())
             
             # Store in database
-            cursor.execute('''
-            INSERT INTO tasks 
-            (task_id, api_key, task_type, sitekey, siteurl, proxy, rqdata, status, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                task_id, 
-                self.api_key, 
-                task_type, 
-                sitekey, 
-                siteurl, 
-                proxy, 
-                rqdata, 
-                "solving", 
-                time.time()
-            ))
-            
-            conn.commit()
-            conn.close()
+            db.tasks.insert_one({
+                'task_id': task_id,
+                'api_key': self.api_key,
+                'task_type': task_type,
+                'sitekey': sitekey,
+                'siteurl': siteurl,
+                'proxy': proxy,
+                'rqdata': rqdata,
+                'status': 'solving',
+                'created_at': time.time()
+            })
             
             # Start a thread to solve the captcha
             thread = threading.Thread(
@@ -1022,65 +1204,90 @@ class Solver:
             return False, str(e)
     
     def _task_solver(self, task_id, task_type, sitekey, siteurl, proxy, rqdata):
+        """
+        Solves a captcha task in a separate thread.
+        Handles database connections properly within the thread context.
+        """
         try:
-            # Create and solve captcha using the new solver
+            # Create a new database connection for this thread
+            client = MongoClient(MONGO_URI,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=10000,
+                socketTimeoutMS=45000,
+                maxPoolSize=50,
+                retryWrites=True
+            )
+            db = client[DB_NAME]
+            
+            # Create and solve captcha using the solver
             captcha = hcaptcha(sitekey, siteurl, proxy, rqdata)
             result = captcha.solve()
             
             # Update task in database
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            
             if result is None:
-                cursor.execute(
-                    "UPDATE tasks SET status = ?, error = ? WHERE task_id = ?", 
-                    ("error", "Failed to solve captcha", task_id)
+                db.tasks.update_one(
+                    {'task_id': task_id},
+                    {'$set': {
+                        'status': 'error',
+                        'error': 'Failed to solve captcha'
+                    }}
                 )
             else:
-                cursor.execute(
-                    "UPDATE tasks SET status = ?, solution = ? WHERE task_id = ?", 
-                    ("solved", result, task_id)
+                db.tasks.update_one(
+                    {'task_id': task_id},
+                    {'$set': {
+                        'status': 'solved',
+                        'solution': result
+                    }}
                 )
                 
                 # Increment API key usage on successful solve with task type
-                increment_api_key_usage(self.api_key, task_type)
-            
-            conn.commit()
-            conn.close()
+                try:
+                    db.api_usage.insert_one({
+                        'api_key': self.api_key,
+                        'timestamp': time.time(),
+                        'task_type': task_type
+                    })
+                except Exception as e:
+                    print(f"Error recording API usage in thread: {e}")
+                    
         except Exception as e:
-            # Update task with error
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE tasks SET status = ?, error = ? WHERE task_id = ?", 
-                ("error", str(e), task_id)
-            )
-            conn.commit()
-            conn.close()
+            try:
+                # Attempt to update task with error
+                db.tasks.update_one(
+                    {'task_id': task_id},
+                    {'$set': {
+                        'status': 'error',
+                        'error': str(e)
+                    }}
+                )
+            except Exception as update_error:
+                print(f"Error updating task status: {update_error}")
+        finally:
+            # Always close the database connection
+            try:
+                client.close()
+            except Exception as e:
+                print(f"Error closing database connection: {e}")
     
     def get_task_solution(self, task_id):
         try:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("SELECT status, solution, error, api_key FROM tasks WHERE task_id = ?", (task_id,))
-            result = cursor.fetchone()
-            conn.close()
+            db = get_db()
+            task = db.tasks.find_one({'task_id': task_id})
             
-            if not result:
+            if not task:
                 return "not_found", None
             
-            status, solution, error, task_api_key = result
-            
             # Verify that the API key matches the task
-            if task_api_key != self.api_key:
+            if task['api_key'] != self.api_key:
                 return "unauthorized", None
             
-            if status == "solving":
+            if task['status'] == "solving":
                 return "solving", None
-            elif status == "error":
-                return "error", error
-            elif status == "solved":
-                return "solved", solution
+            elif task['status'] == "error":
+                return "error", task.get('error')
+            elif task['status'] == "solved":
+                return "solved", task.get('solution')
             
             return "unknown", None
         except Exception as e:
@@ -1155,115 +1362,126 @@ def get_result(task_id):
     
     return jsonify({"status": "error", "message": "Unknown error"}), 500
 
-# Add the missing admin routes
+# Admin routes
 @app.route('/admin_add_credits', methods=['POST'])
 @admin_required
 def admin_add_credits():
+    db = get_db()
     user_id = request.form.get('user_id')
     amount = float(request.form.get('amount', 0))
     
     if not user_id or amount <= 0:
         flash('Invalid input', 'error')
-        return redirect(url_for('admin_users'))
+        return redirect(url_for('users_management'))
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    # Convert user_id to ObjectId safely
+    object_id = safe_object_id(user_id)
+    if not object_id:
+        flash('Invalid user ID', 'error')
+        return redirect(url_for('users_management'))
     
     # Get current balance
-    cursor.execute("SELECT amount FROM balance WHERE user_id = ?", (user_id,))
-    balance_result = cursor.fetchone()
+    balance_doc = db.balance.find_one({'user_id': object_id})
     
-    if not balance_result:
+    if not balance_doc:
         # Create balance record if it doesn't exist
-        cursor.execute(
-            "INSERT INTO balance (user_id, amount, last_updated) VALUES (?, ?, ?)",
-            (user_id, amount, time.time())
-        )
+        db.balance.insert_one({
+            'user_id': object_id,
+            'amount': amount,
+            'last_updated': time.time()
+        })
         new_balance = amount
     else:
         # Update existing balance
-        new_balance = balance_result[0] + amount
-        cursor.execute(
-            "UPDATE balance SET amount = ?, last_updated = ? WHERE user_id = ?",
-            (new_balance, time.time(), user_id)
+        new_balance = balance_doc['amount'] + amount
+        db.balance.update_one(
+            {'_id': balance_doc['_id']},
+            {'$set': {'amount': new_balance, 'last_updated': time.time()}}
         )
     
     # Add transaction record
-    cursor.execute(
-        "INSERT INTO transactions (user_id, amount, type, description, created_at) VALUES (?, ?, ?, ?, ?)",
-        (user_id, amount, 'credit', 'Admin credit', time.time())
-    )
-    
-    conn.commit()
-    conn.close()
+    db.transactions.insert_one({
+        'user_id': object_id,
+        'amount': amount,
+        'type': 'credit',
+        'description': 'Admin credit',
+        'created_at': time.time()
+    })
     
     flash(f'Added {amount} credits to user {user_id}', 'success')
-    return redirect(url_for('admin_users'))
+    return redirect(url_for('users_management'))
 
 @app.route('/admin_reset_api_key', methods=['POST'])
 @admin_required
 def admin_reset_api_key():
+    db = get_db()
     user_id = request.form.get('user_id')
     
     if not user_id:
         flash('Invalid user ID', 'error')
-        return redirect(url_for('admin_users'))
+        return redirect(url_for('users_management'))
+    
+    # Convert user_id to ObjectId safely
+    object_id = safe_object_id(user_id)
+    if not object_id:
+        flash('Invalid user ID format', 'error')
+        return redirect(url_for('users_management'))
     
     # Generate new API key as UUID (GUID)
     new_key = str(uuid.uuid4())
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET api_key = ? WHERE id = ?", (new_key, user_id))
-    conn.commit()
-    conn.close()
+    # Update user's API key
+    db.users.update_one(
+        {'_id': object_id},
+        {'$set': {'api_key': new_key}}
+    )
     
     flash(f'API key reset for user {user_id}', 'success')
-    return redirect(url_for('admin_users'))
+    return redirect(url_for('users_management'))
 
 @app.route('/admin_delete_user', methods=['POST'])
 @admin_required
 def admin_delete_user():
+    db = get_db()
     user_id = request.form.get('user_id')
     
     if not user_id:
         flash('Invalid user ID', 'error')
-        return redirect(url_for('admin_users'))
+        return redirect(url_for('users_management'))
+    
+    # Convert session user_id and requested user_id to ObjectId safely
+    session_user_object_id = safe_object_id(session['user_id'])
+    object_id = safe_object_id(user_id)
+    
+    if not object_id:
+        flash('Invalid user ID format', 'error')
+        return redirect(url_for('users_management'))
     
     # Prevent deleting yourself
-    if int(user_id) == session.get('user_id'):
+    if session_user_object_id and object_id == session_user_object_id:
         flash('You cannot delete your own account', 'error')
-        return redirect(url_for('admin_users'))
+        return redirect(url_for('users_management'))
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    # Get user's API key for deleting related records
+    user = db.users.find_one({'_id': object_id})
     
-    # Delete balance
-    cursor.execute("DELETE FROM balance WHERE user_id = ?", (user_id,))
-    
-    # Delete transactions
-    cursor.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
-    
-    # Get API key to delete related tasks
-    cursor.execute("SELECT api_key FROM users WHERE id = ?", (user_id,))
-    api_key_result = cursor.fetchone()
-    
-    if api_key_result:
-        # Delete tasks
-        cursor.execute("DELETE FROM tasks WHERE api_key = ?", (api_key_result[0],))
-    
-    # Delete user
-    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    
-    conn.commit()
-    conn.close()
+    if user:
+        # Delete user's records
+        db.balance.delete_many({'user_id': object_id})
+        db.transactions.delete_many({'user_id': object_id})
+        db.tasks.delete_many({'api_key': user['api_key']})
+        db.api_usage.delete_many({'api_key': user['api_key']})
+        
+        # Delete user
+        db.users.delete_one({'_id': object_id})
     
     flash(f'User {user_id} deleted successfully', 'success')
-    return redirect(url_for('admin_users'))
+    return redirect(url_for('users_management'))
 
 @app.route('/admin_update_settings', methods=['POST'])
 @admin_required
 def admin_update_settings():
+    db = get_db()
     # Get form data
     allow_registration = 'allow_registration' in request.form
     require_captcha = 'require_captcha' in request.form
@@ -1271,37 +1489,22 @@ def admin_update_settings():
     default_credits = float(request.form.get('default_credits', 0))
     credit_cost = float(request.form.get('credit_cost', 0))
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
     # Update settings
-    cursor.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        ('allow_registration', str(int(allow_registration)), time.time())
-    )
+    settings_to_update = {
+        'allow_registration': str(int(allow_registration)),
+        'require_captcha': str(int(require_captcha)),
+        'enable_api': str(int(enable_api)),
+        'default_credits': str(default_credits),
+        'credit_cost': str(credit_cost)
+    }
     
-    cursor.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        ('require_captcha', str(int(require_captcha)), time.time())
-    )
-    
-    cursor.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        ('enable_api', str(int(enable_api)), time.time())
-    )
-    
-    cursor.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        ('default_credits', str(default_credits), time.time())
-    )
-    
-    cursor.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        ('credit_cost', str(credit_cost), time.time())
-    )
-    
-    conn.commit()
-    conn.close()
+    # Update each setting
+    for key, value in settings_to_update.items():
+        db.settings.update_one(
+            {'key': key},
+            {'$set': {'value': value, 'updated_at': time.time()}},
+            upsert=True
+        )
     
     flash('Settings updated successfully', 'success')
     return redirect(url_for('admin_settings'))
@@ -1317,34 +1520,237 @@ def admin_backup_database():
 @app.route('/admin_reset_settings', methods=['POST'])
 @admin_required
 def admin_reset_settings():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
+    db = get_db()
     # Reset to default settings
     default_settings = {
-        'allow_registration': 1,
-        'require_captcha': 1,
-        'enable_api': 1,
-        'default_credits': 0.0,
-        'credit_cost': 0.003,
-        'basic_cost_per_1k': 3.0,
-        'enterprise_cost_per_1k': 5.0,
-        'min_balance': 0.0
+        'allow_registration': '1',
+        'require_captcha': '1',
+        'enable_api': '1',
+        'default_credits': '0.0',
+        'credit_cost': '0.003',
+        'basic_cost_per_1k': '3.0',
+        'enterprise_cost_per_1k': '5.0',
+        'min_balance': '0.0'
     }
     
+    # Update each setting to default
     for key, value in default_settings.items():
-        cursor.execute(
-            "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-            (key, str(value), time.time())
+        db.settings.update_one(
+            {'key': key},
+            {'$set': {'value': value, 'updated_at': time.time()}},
+            upsert=True
         )
-    
-    conn.commit()
-    conn.close()
     
     flash('Settings have been reset to defaults', 'success')
     return redirect(url_for('admin_settings'))
 
+@app.route('/task/<task_id>')
+@login_required
+def get_task_status(task_id):
+    try:
+        db = get_db()
+        # Get user_id from session
+        user_id = safe_object_id(session.get('user_id'))
+        if not user_id:
+            return jsonify({'error': 'Invalid session'}), 401
+        
+        # Get user API key
+        user = db.users.find_one({'_id': user_id})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        api_key = user.get('api_key')
+        if not api_key:
+            return jsonify({'error': 'API key not found'}), 404
+            
+        # Find task by ID and API key to ensure it belongs to this user
+        task = db.tasks.find_one({'task_id': task_id, 'api_key': api_key})
+        if not task:
+            return jsonify({'error': 'Task not found or not authorized'}), 404
+            
+        # Prepare response data
+        response_data = {
+            'status': task.get('status', 'unknown'),
+            'created_at': task.get('created_at', 0),
+            'task_type': task.get('task_type', 'unknown')
+        }
+        
+        # Add results if task is completed
+        if task.get('status') == 'completed':
+            response_data['results'] = task.get('results', {})
+            
+        return jsonify(response_data)
+    except Exception as e:
+        print(f"Error fetching task status: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/api/hcaptcha')
+def api_hcaptcha():
+    try:
+        db = get_db()
+        start_time = time.time()
+        api_key = request.args.get('api_key')
+        num_tasks = int(request.args.get('num_tasks', 1))
+        
+        # Validate API key
+        if not api_key:
+            return jsonify({'error': 'API key is required'}), 400
+            
+        user = db.users.find_one({'api_key': api_key})
+        if not user:
+            return jsonify({'error': 'Invalid API key'}), 401
+        
+        # Check user balance
+        user_id = user['_id']
+        balance = db.balance.find_one({'user_id': user_id})
+        
+        # Verify sufficient balance
+        task_cost = 0.5  # Cost per task
+        total_cost = task_cost * num_tasks
+        
+        if not balance or float(balance.get('amount', 0)) < total_cost:
+            return jsonify({'error': 'Insufficient balance'}), 402
+            
+        # Deduct credits from balance
+        try:
+            db.balance.update_one(
+                {'user_id': user_id},
+                {'$inc': {'amount': -total_cost}}
+            )
+            
+            # Record transaction
+            db.transactions.insert_one({
+                'user_id': user_id,
+                'amount': -total_cost,
+                'type': 'debit',
+                'description': f'API usage: {num_tasks} hCaptcha task(s)',
+                'created_at': time.time()
+            })
+        except Exception as e:
+            print(f"Error updating balance: {e}")
+            return jsonify({'error': 'Failed to update balance'}), 500
+            
+        # Create task and record usage
+        task_id = str(uuid.uuid4())
+        increment_api_key_usage(api_key, 'hcaptcha_basic')
+        
+        # Store task in database
+        db.tasks.insert_one({
+            'task_id': task_id,
+            'api_key': api_key,
+            'user_id': user_id,
+            'task_type': 'hcaptcha_basic',
+            'num_tasks': num_tasks,
+            'cost': total_cost,
+            'status': 'processing',
+            'created_at': time.time()
+        })
+        
+        # Process the task asynchronously
+        # Note: Implementation of process_hcaptcha_task function needs to be added
+        threading.Thread(target=process_hcaptcha_task, args=(task_id, num_tasks)).start()
+        
+        return jsonify({
+            'task_id': task_id,
+            'status': 'processing',
+            'created_at': time.time(),
+            'processing_time': time.time() - start_time
+        })
+    except Exception as e:
+        print(f"API hCaptcha error: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+# Define the process_hcaptcha_task function (missing in original code)
+def process_hcaptcha_task(task_id, num_tasks):
+    """
+    Process hCaptcha tasks asynchronously.
+    This function should be implemented to handle the actual captcha solving.
+    """
+    try:
+        db = get_db()
+        # Simulate processing time
+        time.sleep(5)  # Replace with actual processing
+        
+        # Update task status
+        db.tasks.update_one(
+            {'task_id': task_id},
+            {'$set': {
+                'status': 'completed',
+                'results': {
+                    'success': True,
+                    'solved': num_tasks,
+                    'completed_at': time.time()
+                }
+            }}
+        )
+    except Exception as e:
+        print(f"Error processing hCaptcha task: {e}")
+        # Update task with error status
+        try:
+            db = get_db()
+            db.tasks.update_one(
+                {'task_id': task_id},
+                {'$set': {
+                    'status': 'error',
+                    'error': str(e),
+                    'completed_at': time.time()
+                }}
+            )
+        except:
+            pass  # If we can't even update the error status, just log and continue
+
+# Add a compatibility route for admin_users to maintain backward compatibility with templates
+@app.route('/admin_users')
+@admin_required
+def admin_users():
+    """
+    This route maintains backward compatibility with templates that use admin_users.
+    Implements the same functionality as users_management but formats data for the admin_users.html template.
+    """
+    try:
+        db = get_db()
+        # Get all users with pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        skip = (page - 1) * per_page
+        
+        # Get all users
+        users_data = list(db.users.find({}, {
+            '_id': 1, 
+            'username': 1, 
+            'created_at': 1, 
+            'last_login': 1, 
+            'is_admin': 1
+        }).sort('created_at', -1))
+        
+        # Format the data to match the template expectations
+        formatted_users = []
+        for user in users_data:
+            # Get balance
+            balance_doc = db.balance.find_one({'user_id': user['_id']})
+            balance = balance_doc['amount'] if balance_doc else 0.0
+            
+            # Format as list to match template expectations
+            formatted_users.append([
+                str(user['_id']),              # User ID
+                user['username'],              # Username
+                user.get('created_at', 0),     # Created timestamp
+                user.get('last_login', 0),     # Last login timestamp
+                bool(user.get('is_admin', 0)), # Admin status
+                balance                       # Balance
+            ])
+        
+        return render_template('admin_users.html', 
+                               users=formatted_users,
+                               page=page,
+                               total_pages=math.ceil(len(formatted_users) / per_page))
+    except Exception as e:
+        print(f"Error in admin_users: {e}")
+        flash(f"An error occurred: {str(e)}", "danger")
+        return render_template('admin_users.html', users=[], page=1, total_pages=1)
+
 if __name__ == '__main__':
     # Enable debug mode only in development environments
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', port=80, debug=debug_mode) 
+    app.run(host='0.0.0.0', port=80, debug=debug_mode)
+        

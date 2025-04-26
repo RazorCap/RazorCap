@@ -10,3 +10,4 @@ asyncio
 bezier
 pyjwt
 groq
+pymongo

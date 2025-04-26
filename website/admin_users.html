@@ -349,13 +349,13 @@
                         <td>{{ user[5] }}</td>
                         <td>
                             <div class="admin-actions">
-                                <button class="admin-btn" onclick="showAddCreditsModal({{ user[0] }})">
+                                <button class="admin-btn" onclick="showAddCreditsModal('{{ user[0] }}')">
                                     <i class="fas fa-plus"></i> Add Credits
                                 </button>
-                                <button class="admin-btn" onclick="showResetApiKeyModal({{ user[0] }})">
+                                <button class="admin-btn" onclick="showResetApiKeyModal('{{ user[0] }}')">
                                     <i class="fas fa-key"></i> Reset API Key
                                 </button>
-                                <button class="admin-btn admin-btn-danger" onclick="showDeleteUserModal({{ user[0] }})">
+                                <button class="admin-btn admin-btn-danger" onclick="showDeleteUserModal('{{ user[0] }}')">
                                     <i class="fas fa-trash"></i> Delete
                                 </button>
                             </div>
