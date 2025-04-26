@@ -16,6 +16,11 @@ class util:
 
     @staticmethod
     def get_mm(start: tuple, goal: tuple, screen_size: tuple, max_points: int, random_amount: int, polling_rate: int) -> list:
+        # Ensure tuple values are integers
+        start = (int(start[0]), int(start[1]))
+        goal = (int(goal[0]), int(goal[1]))
+        screen_size = (int(screen_size[0]), int(screen_size[1]))
+        
         cp = util.randint(3, 5)
         x, y = np.linspace(start[0], goal[0], num=cp, dtype='int'), np.linspace(start[1], goal[1], num=cp, dtype='int')
         r = [util.randint(-random_amount, random_amount) for _ in range(cp)]
@@ -38,12 +43,16 @@ class util:
 
     @staticmethod
     def get_random_point(bbox: tuple) -> tuple:
-        return util.randint(bbox[0][0], bbox[1][0]), util.randint(bbox[0][1], bbox[1][1])
+        # Ensure integer coordinates
+        x1, y1 = int(bbox[0][0]), int(bbox[0][1])
+        x2, y2 = int(bbox[1][0]), int(bbox[1][1])
+        return util.randint(x1, x2), util.randint(y1, y2)
 
     @staticmethod
     def get_center(bbox: tuple) -> tuple:
-        x1, y1 = bbox[0]
-        x2, y2 = bbox[1]
+        # Ensure integer coordinates
+        x1, y1 = int(bbox[0][0]), int(bbox[0][1])
+        x2, y2 = int(bbox[1][0]), int(bbox[1][1])
 
         return int(x1 + (x2 - x1) / 2), int(y1 + (y2 - y1) / 2)
 
@@ -56,9 +65,13 @@ class rectangle:
         return self.width, self.height
 
     def get_box(self, rel_x: int, rel_y: int) -> tuple:
+        rel_x = int(rel_x)
+        rel_y = int(rel_y)
         return (rel_x, rel_y), (rel_x + self.width, rel_y + self.height)
 
     def get_corners(self, rel_x: int = 0, rel_y: int = 0) -> list:
+        rel_x = int(rel_x)
+        rel_y = int(rel_y)
         return [(rel_x, rel_y), (rel_x + self.width, rel_y), (rel_x, rel_y + self.height), (rel_x + self.width, rel_y + self.height)]
 
 class widget_check:
@@ -80,7 +93,7 @@ class text_challenge:
         x = min(max(box_centre[0] + 25, 0), screen_size[0] / 2 - 185)
         y = min(max(box_centre[1] - 150, 10), screen_size[1] - 310)
     
-        self.widget_position = (x, y)
+        self.widget_position = (int(x), int(y))
         self.widget = rectangle(370, 300)
         self.text_box = rectangle(314, 40)
         self.button = rectangle(80, 35)
@@ -224,9 +237,13 @@ class get_cap:
             'mm-mp': 0
         }
 
-        goal = util.get_random_point(self.widget.get_closest(self.position))
-        mouse_movement = util.get_mm(self.position, goal, self.screen_size, 75, 3, 15)
-        self.position = goal
+        # Ensure position is stored as integers
+        position = tuple(int(val) for val in self.position)
+        goal = util.get_random_point(self.widget.get_closest(position))
+        mouse_movement = util.get_mm(position, goal, self.screen_size, 75, 3, 15)
+        
+        # Update position with integers
+        self.position = tuple(int(val) for val in goal)
         data['mm'] = mouse_movement
         data['mm-mp'] = util.periods([x[-1] for x in mouse_movement])
 
@@ -234,7 +251,7 @@ class get_cap:
 
 class check_cap:
     global COMMON_SCREEN_SIZES, COMMON_CORE_COUNTS
-    def __init__(self, old_motion_data: dict) -> None:
+    def __init__(self, old_motion_data) -> None:
         self.position = []
         self.old_motion_data = old_motion_data
         self.screen_size = old_motion_data.screen_size
@@ -253,7 +270,13 @@ class check_cap:
             'topLevel': self.top_level()
         }
     
-        rel_position = (self.position[0] - self.widget.widget_position[0], self.position[1] - self.widget.widget_position[1])
+        # Ensure position values are integers
+        widget_pos_x = int(self.widget.widget_position[0])
+        widget_pos_y = int(self.widget.widget_position[1])
+        pos_x = int(self.position[0])
+        pos_y = int(self.position[1])
+        
+        rel_position = (pos_x - widget_pos_x, pos_y - widget_pos_y)
     
         for _ in range(3):
             for box in [self.widget.get_text_box(), self.widget.get_button_box()]:
@@ -270,10 +293,16 @@ class check_cap:
     def top_level(self) -> dict:
         data = self.old_motion_data.data['topLevel']
         data['mm'] += self.old_motion_data.mouse_movement
-        position = tuple(data['mm'][-1][:-1])
-        data['mm'] += util.get_mm(position, util.get_random_point(self.widget.get_closest(position)), self.screen_size, 60, 3, 16)
+        
+        # Convert to integers and make a proper tuple
+        position = tuple(int(val) for val in data['mm'][-1][:-1])
+        
+        random_point = util.get_random_point(self.widget.get_closest(position))
+        data['mm'] += util.get_mm(position, random_point, self.screen_size, 60, 3, 16)
         data['mm-mp'] = util.periods([x[-1] for x in data['mm']])
-        self.position = tuple(data['mm'][-1][:-1])
+        
+        # Store position as integers
+        self.position = tuple(int(val) for val in data['mm'][-1][:-1])
         return data
 
 class motion_data:
