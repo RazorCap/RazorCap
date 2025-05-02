@@ -1,4 +1,4 @@
-# Razor Cap
+# RazorCap (https://razorcap.me) Source Code
 
 - Become the next solver
 
