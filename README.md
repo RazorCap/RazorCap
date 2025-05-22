@@ -7,4 +7,5 @@
 
 # Skidded Solvers DO NOT BUY its 100% skidded from this source!
 - https://uhq-solver.monster (https://imgur.com/a/PkG0PnN)
-- https://app.terax.lol/ (AKA RavenSolver)
+- https://app.terax.lol (AKA RavenSolver)
+- http://147.189.168.213:1000 (LeftySolver https://imgur.com/a/VtdhuaF)
